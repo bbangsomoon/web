@@ -1,0 +1,102 @@
+"use client";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AtSign, BarChart3, ChevronDown, ChevronRight, Home, LayoutGrid, Plus, Settings, Store, UserRound } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { LegalFooter } from "@/components/common/legal-footer";
+import { useToast } from "@/components/common/providers";
+import { mockApi } from "@/lib/api/mock-api";
+
+type NavItem = { href: string; label: string; icon: LucideIcon; special?: boolean };
+const home: NavItem = { href: "/dashboard", label: "홈", icon: Home };
+const contents: NavItem = { href: "/contents", label: "콘텐츠", icon: LayoutGrid };
+const create: NavItem = { href: "/contents/new", label: "콘텐츠 만들기", icon: Plus, special: true };
+const mobileCreate: NavItem = { ...create, label: "만들기" };
+const analytics: NavItem = { href: "/analytics", label: "성과", icon: BarChart3 };
+const settings: NavItem = { href: "/settings/store", label: "설정", icon: Settings };
+const desktopPrimary = [home, contents, analytics];
+const mobilePrimary = [home, contents, mobileCreate, analytics, settings];
+const desktopMore = [
+  { href: "/settings/store", label: "매장 관리", icon: Store },
+  { href: "/settings/social", label: "SNS 관리", icon: AtSign },
+  { href: "/settings/account", label: "계정 관리", icon: UserRound },
+];
+
+export function AppShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const queryClient = useQueryClient();
+  const toast = useToast();
+  const stores = useQuery({ queryKey: ["stores"], queryFn: mockApi.getStores });
+  const currentStore = useQuery({ queryKey: ["store"], queryFn: mockApi.getStore });
+  const switchStore = useMutation({
+    mutationFn: mockApi.setActiveStore,
+    onSuccess: (store) => {
+      queryClient.setQueryData(["store"], store);
+      queryClient.invalidateQueries({ queryKey: ["social"] });
+      toast(`${store.name}(으)로 전환했어요.`, "info");
+    },
+  });
+  const active = (href: string) => {
+    if (href === "/dashboard") return pathname === href;
+    if (href === "/contents") return pathname.startsWith("/contents") && !pathname.startsWith("/contents/new");
+    return pathname.startsWith(href);
+  };
+  return <div className="min-h-screen">
+    <aside className="fixed inset-y-0 left-0 z-40 hidden w-[264px] overflow-y-auto border-r border-stone-200 bg-[#26231f] p-6 text-white lg:flex lg:flex-col">
+      <Link href="/dashboard" className="focus-ring block w-full shrink-0 rounded-xl py-1.5 text-center text-[22px] font-semibold tracking-[-.05em] text-white">빵소문</Link>
+      <div className="relative mt-5 shrink-0">
+        <select aria-label="관리할 매장 선택" value={currentStore.data?.id ?? ""} onChange={(event) => switchStore.mutate(event.target.value)} disabled={stores.isLoading || currentStore.isLoading || switchStore.isPending} className="focus-ring min-h-12 w-full appearance-none rounded-2xl border border-white/20 bg-white/10 px-4 pr-10 text-sm font-semibold text-white transition hover:bg-[#39342f] disabled:opacity-60">
+          {!currentStore.data && <option value="">매장을 불러오는 중</option>}
+          {stores.data?.map((store) => <option key={store.id} value={store.id} className="bg-[#26231f] text-white">{store.name}</option>)}
+        </select>
+        <ChevronDown className="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-white/70" />
+      </div>
+      <nav className="mt-7 shrink-0 space-y-1">
+        {desktopPrimary.map(({ href, label, icon: Icon, special }) => {
+          const selected = active(href);
+          return (
+            <Link
+              key={href}
+              href={href}
+              aria-current={selected ? "page" : undefined}
+              className={cn(
+                "focus-ring flex min-h-12 items-center gap-3 rounded-2xl px-4 text-sm font-semibold transition",
+                selected ? "bg-white text-stone-900 shadow-sm" : "text-white hover:bg-[#39342f]",
+                special && "mt-3 bg-[#ef6b32]! text-white! hover:bg-[#d95320]!",
+              )}
+            >
+              <Icon className="size-[19px]" />
+              {label}
+              {selected ? <ChevronRight className="ml-auto size-4" aria-hidden /> : special ? <span className="ml-auto text-xs opacity-75">AI</span> : null}
+            </Link>
+          );
+        })}
+      </nav>
+      <div className="mt-4 shrink-0 space-y-1 border-t border-white/20 pt-4">
+        {desktopMore.map(({ href, label, icon: Icon }) => {
+          const selected = pathname === href;
+          return (
+            <Link
+              key={href}
+              href={href}
+              aria-current={selected ? "page" : undefined}
+              className={cn(
+                "focus-ring flex min-h-11 items-center gap-3 rounded-xl px-4 text-sm font-semibold transition",
+                selected ? "bg-white text-stone-900 shadow-sm" : "text-white hover:bg-[#39342f]",
+              )}
+            >
+              <Icon className="size-[18px]" />
+              {label}
+              {selected && <ChevronRight className="ml-auto size-4" aria-hidden />}
+            </Link>
+          );
+        })}
+      </div>
+      <LegalFooter dark className="mt-auto shrink-0 border-t pt-5"/>
+    </aside>
+    <div className="app-content min-h-screen pb-24 lg:pb-0"><div className="mx-auto max-w-[1200px] px-4 py-6 sm:px-7 sm:py-8 lg:px-10 lg:py-10">{children}</div></div>
+    <nav aria-label="주요 메뉴" className="fixed inset-x-0 bottom-0 z-50 grid h-[76px] grid-cols-5 border-t border-stone-200 bg-white/95 px-2 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">{mobilePrimary.map(({href,label,icon:Icon,special})=>{const selected=href==="/settings/store"?pathname.startsWith("/settings"):active(href);return <Link key={href} href={href} className={cn("focus-ring relative flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl text-[11px] font-semibold transition-colors hover:bg-orange-50/70 hover:text-[#ef6b32]",selected?"text-[#ef6b32]":"text-stone-500",special&&"text-[#ef6b32]")}><span className={cn("grid size-8 place-items-center rounded-xl transition-colors",special&&"absolute -top-5 size-14 rounded-2xl bg-[#ef6b32] text-white shadow-[0_8px_22px_rgba(239,107,50,.35)] hover:bg-[#d95320]")}><Icon className={cn("size-5",special&&"size-7")}/></span><span className={cn(special&&"mt-9")}>{label}</span></Link>})}</nav>
+  </div>;
+}

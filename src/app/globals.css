@@ -1,26 +1,68 @@
+@import "pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css";
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #fbfaf6;
+  --foreground: #2b2824;
+  --orange: #ef6b32;
+  --orange-dark: #d95320;
+  --cream: #fff6e9;
+  --line: #e9e3da;
+  --muted: #736d65;
+  --green: #658060;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  /* 빵소문의 가장 두꺼운 글자는 Pretendard SemiBold(600)로 제한합니다. */
+  --font-weight-semibold: 600;
+  --font-weight-bold: 600;
+  --font-weight-extrabold: 600;
+  --font-weight-black: 600;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
 body {
+  margin: 0;
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif;
+  font-synthesis: none;
+}
+strong, b { font-weight: 600; }
+button, input, textarea, select { font: inherit; }
+button, a { -webkit-tap-highlight-color: transparent; }
+button:not(:disabled), a, select:not(:disabled), option, [role="button"] { cursor: pointer; }
+button:disabled { cursor: not-allowed; }
+input[type="checkbox"]:not(:disabled), input[type="radio"]:not(:disabled) { cursor: pointer; }
+input[type="checkbox"]:disabled, input[type="radio"]:disabled { cursor: not-allowed; }
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator,
+input[type="number"]::-webkit-inner-spin-button { cursor: pointer; }
+::selection { background: #ffd8c3; color: #6d270c; }
+
+.display-serif { font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, sans-serif; }
+.surface { background: rgba(255,255,255,.84); border: 1px solid var(--line); box-shadow: 0 10px 32px rgba(63,45,28,.05); }
+.focus-ring:focus-visible { outline: 3px solid rgba(239,107,50,.22); outline-offset: 2px; }
+.field {
+  width: 100%; min-height: 48px; border: 1px solid #ded7ce; border-radius: 14px;
+  background: #fff; padding: 11px 14px; color: #2b2824; transition: .18s ease;
+}
+.field::placeholder { color: #aaa39a; }
+.field:focus { outline: 0; border-color: var(--orange); box-shadow: 0 0 0 3px rgba(239,107,50,.12); }
+.hide-scrollbar { scrollbar-width: none; }
+.hide-scrollbar::-webkit-scrollbar { display: none; }
+
+@keyframes toast-in { from { opacity:0; transform: translateY(-12px); } to { opacity:1; transform: translateY(0); } }
+.toast-in { animation: toast-in .25s ease-out; }
+
+@media (min-width: 1024px) {
+  .app-content { margin-left: 264px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }

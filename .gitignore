@@ -12,6 +12,8 @@
 
 # testing
 /coverage
+/playwright-report/
+/test-results/
 
 # next.js
 /.next/
@@ -22,20 +24,91 @@
 
 # misc
 .DS_Store
+Thumbs.db
+Desktop.ini
 *.pem
+*.key
+*.p12
+*.pfx
+*.swp
+*.swo
+*~
 
 # debug
+*.log
+/logs/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# environment files and local secret stores
 .env*
+.envrc
+.direnv/
+/config/
+*.secret
+*.private
+.npmrc
+credentials*.json
+service-account*.json
+*-service-account.json
 
 # vercel
-.vercel
+.vercel/
+.netlify/
+.wrangler/
+.firebase/
 
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local IDE and tool state
+/.idea/
+/.vscode/
+*.iml
+/.cache/
+/.turbo/
+.eslintcache
+
+# AI assistant instructions and local agent state
+AGENTS.md
+**/AGENTS.md
+CLAUDE.md
+**/CLAUDE.md
+CODEX.md
+**/CODEX.md
+GEMINI.md
+**/GEMINI.md
+AI_INSTRUCTIONS.md
+**/AI_INSTRUCTIONS.md
+/.codex/
+**/.codex/
+/.agents/
+**/.agents/
+/.agent/
+**/.agent/
+/.claude/
+**/.claude/
+/.cursor/
+**/.cursor/
+/.continue/
+**/.continue/
+/.windsurf/
+**/.windsurf/
+/.roo/
+**/.roo/
+.cursorrules
+.windsurfrules
+.roomodes
+.aider*
+.mcp.json
+**/.mcp.json
+/.mcp/
+**/.mcp/
+*.instructions.md
+*.prompt.md
+/.github/instructions/
+/.github/prompts/
+/.github/copilot-instructions.md
