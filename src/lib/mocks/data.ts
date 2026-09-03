@@ -59,7 +59,7 @@ const texts = [
   "오늘 남은 빵을 오후 6시부터 작은 할인가로 준비합니다. 필요한 만큼만 구워 남김을 줄여요.",
   "이번 주말, 동네 손님들을 위한 시식 테이블을 열어요. 편하게 들러 맛보고 인사 나눠요.",
 ];
-const statuses: Content["status"][] = ["published", "scheduled", "published", "generated", "failed", "draft", "scheduled", "published"];
+const statuses: Content["status"][] = ["published", "scheduled", "published", "draft", "failed", "draft", "scheduled", "published"];
 export const initialContents: Content[] = texts.map((body, index) => {
   const createdAt = new Date(now - index * 86400000).toISOString();
   const status = statuses[index];

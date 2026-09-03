@@ -5,7 +5,7 @@ import Script from "next/script";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Check, Clock3, Copy, Eye, Heart, Info, MapPin, Phone, Plus, Star, Store as StoreIcon, UtensilsCrossed } from "lucide-react";
+import { ArrowLeft, Check, ChevronRight, Clock3, Copy, Eye, Heart, Info, MapPin, Phone, Plus, Star, Store as StoreIcon, UtensilsCrossed } from "lucide-react";
 import { z } from "zod";
 import { Button, ErrorState, LoadingState, PageHeader } from "@/components/common/ui";
 import { useToast } from "@/components/common/providers";
@@ -202,7 +202,7 @@ export default function StoreSettingsPage() {
   return (
     <>
       <PageHeader title="매장 관리" />
-      <div className="mx-auto max-w-5xl">
+      <div className="max-w-5xl">
       <Script
         id="kakao-postcode"
         src="https://t1.kakaocdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"
@@ -217,7 +217,7 @@ export default function StoreSettingsPage() {
               <div role="tablist" aria-label="매장 정보 항목" aria-orientation="vertical" className="space-y-1">
                 {storeTabs.map((tab) => {
                   const selected = activeTab === tab.value;
-                  return <button key={tab.value} type="button" role="tab" aria-selected={selected} onClick={() => selectTab(tab.value)} className={cn("focus-ring flex min-h-11 w-full items-center rounded-xl px-3 text-left text-sm font-bold transition", selected ? "bg-stone-900 text-white shadow-sm" : "text-stone-500 hover:bg-stone-100 hover:text-stone-800")}>{tab.label}</button>;
+                  return <button key={tab.value} type="button" role="tab" aria-selected={selected} onClick={() => selectTab(tab.value)} className={cn("focus-ring flex min-h-11 w-full items-center rounded-xl px-3 text-left text-sm font-bold transition", selected ? "bg-[#efe7dc] text-[#5c4635] shadow-sm" : "text-stone-500 hover:bg-stone-100 hover:text-stone-800")}>{tab.label}{selected && <ChevronRight className="ml-auto size-4" aria-hidden />}</button>;
                 })}
               </div>
               <div className="mt-2 border-t border-stone-200 pt-2">
@@ -230,7 +230,7 @@ export default function StoreSettingsPage() {
         <div role="tablist" aria-label="매장 정보 항목" className="mx-auto grid max-w-xl grid-cols-4 gap-1 rounded-2xl border border-stone-200 bg-white p-1.5 shadow-sm lg:hidden">
           {storeTabs.map((tab) => {
             const selected = activeTab === tab.value;
-            return <button key={tab.value} type="button" role="tab" aria-selected={selected} onClick={() => selectTab(tab.value)} className={cn("focus-ring min-h-10 rounded-xl px-2 text-xs font-bold transition sm:text-sm", selected ? "bg-stone-900 text-white shadow-sm" : "text-stone-500 hover:bg-stone-100 hover:text-stone-800")}>{tab.label}</button>;
+            return <button key={tab.value} type="button" role="tab" aria-selected={selected} onClick={() => selectTab(tab.value)} className={cn("focus-ring min-h-10 rounded-xl px-2 text-xs font-bold transition sm:text-sm", selected ? "bg-[#efe7dc] text-[#5c4635] shadow-sm" : "text-stone-500 hover:bg-stone-100 hover:text-stone-800")}>{tab.label}</button>;
           })}
         </div>
 

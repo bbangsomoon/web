@@ -1,4 +1,4 @@
-export type ContentStatus = "draft" | "generated" | "scheduled" | "published" | "failed";
+export type ContentStatus = "draft" | "scheduled" | "published" | "failed";
 export type ContentTone = "friendly" | "lively" | "witty" | "premium";
 export type ContentPurpose = "new_product" | "today_bread" | "promotion" | "event";
 export type ContentFormat = "feed" | "reel";
@@ -9,7 +9,7 @@ export interface LoginRequest { email: string; password: string; }
 export interface SignupRequest { name: string; phone: string; email: string; password: string; }
 export interface FirstStoreRequest {
   name: string; postalCode: string; address: string; addressDetail: string; phone: string;
-  businessRegistrationNumber: string; representativeName: string;
+  businessRegistrationNumber: string; representativeName: string; latitude: number; longitude: number;
 }
 
 export interface Store {
@@ -38,7 +38,6 @@ export interface Content {
   createdAt: string; updatedAt: string; scheduledAt?: string; publishedAt?: string; insight?: PostInsight;
 }
 export interface ContentGenerationRequest {
-  breadName: string; price?: number; quantity?: string; highlights?: string;
-  promotion?: string; additionalRequest?: string; tone: ContentTone; purpose: ContentPurpose; format: ContentFormat;
+  prompt: string;
   media: Array<{ type: ContentAsset["type"]; url: string }>;
 }

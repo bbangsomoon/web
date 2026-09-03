@@ -1,20 +1,21 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AtSign, BarChart3, ChevronDown, ChevronRight, Home, LayoutGrid, Plus, Settings, Store, UserRound } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LegalFooter } from "@/components/common/legal-footer";
 import { useToast } from "@/components/common/providers";
-import { mockApi } from "@/lib/api/mock-api";
+import { backendApi } from "@/lib/api/backend-api";
 
-type NavItem = { href: string; label: string; icon: LucideIcon; special?: boolean };
+type NavItem = { href: string; label: string; icon: LucideIcon; special?: boolean; disabled?: boolean };
 const home: NavItem = { href: "/dashboard", label: "홈", icon: Home };
 const contents: NavItem = { href: "/contents", label: "콘텐츠", icon: LayoutGrid };
 const create: NavItem = { href: "/contents/new", label: "콘텐츠 만들기", icon: Plus, special: true };
 const mobileCreate: NavItem = { ...create, label: "만들기" };
-const analytics: NavItem = { href: "/analytics", label: "성과", icon: BarChart3 };
+const analytics: NavItem = { href: "/analytics", label: "성과", icon: BarChart3, disabled: true };
 const settings: NavItem = { href: "/settings/store", label: "설정", icon: Settings };
 const desktopPrimary = [home, contents, analytics];
 const mobilePrimary = [home, contents, mobileCreate, analytics, settings];
@@ -28,12 +29,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const queryClient = useQueryClient();
   const toast = useToast();
-  const stores = useQuery({ queryKey: ["stores"], queryFn: mockApi.getStores });
-  const currentStore = useQuery({ queryKey: ["store"], queryFn: mockApi.getStore });
+  const [activeStoreId, setActiveStoreId] = useState("");
+  const stores = useQuery({ queryKey: ["stores"], queryFn: backendApi.getStores });
+  const selectedStoreId = activeStoreId && stores.data?.some((store) => store.id === activeStoreId) ? activeStoreId : stores.data?.[0]?.id ?? "";
+  const currentStore = useQuery({ queryKey: ["store", selectedStoreId], queryFn: () => backendApi.getStore(selectedStoreId), enabled: Boolean(selectedStoreId) });
   const switchStore = useMutation({
-    mutationFn: mockApi.setActiveStore,
+    mutationFn: async (id: string) => {
+      const store = await backendApi.getStore(id);
+      localStorage.setItem("bbangsomoon.active-store", id);
+      return store;
+    },
     onSuccess: (store) => {
-      queryClient.setQueryData(["store"], store);
+      setActiveStoreId(store.id);
+      queryClient.setQueryData(["store", store.id], store);
       queryClient.invalidateQueries({ queryKey: ["social"] });
       toast(`${store.name}(으)로 전환했어요.`, "info");
     },
@@ -54,12 +62,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <ChevronDown className="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-white/70" />
       </div>
       <nav className="mt-7 shrink-0 space-y-1">
-        {desktopPrimary.map(({ href, label, icon: Icon, special }) => {
-          const selected = active(href);
+        {desktopPrimary.map(({ href, label, icon: Icon, special, disabled }) => {
+          const selected = !disabled && active(href);
           return (
             <Link
               key={href}
               href={href}
+              onClick={(event) => { if (disabled) { event.preventDefault(); toast("성과 기능은 준비 중이에요.", "info"); } }}
+              aria-disabled={disabled || undefined}
               aria-current={selected ? "page" : undefined}
               className={cn(
                 "focus-ring flex min-h-12 items-center gap-3 rounded-2xl px-4 text-sm font-semibold transition",
@@ -97,6 +107,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <LegalFooter dark className="mt-auto shrink-0 border-t pt-5"/>
     </aside>
     <div className="app-content min-h-screen pb-24 lg:pb-0"><div className="mx-auto max-w-[1200px] px-4 py-6 sm:px-7 sm:py-8 lg:px-10 lg:py-10">{children}</div></div>
-    <nav aria-label="주요 메뉴" className="fixed inset-x-0 bottom-0 z-50 grid h-[76px] grid-cols-5 border-t border-stone-200 bg-white/95 px-2 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">{mobilePrimary.map(({href,label,icon:Icon,special})=>{const selected=href==="/settings/store"?pathname.startsWith("/settings"):active(href);return <Link key={href} href={href} className={cn("focus-ring relative flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl text-[11px] font-semibold transition-colors hover:bg-orange-50/70 hover:text-[#ef6b32]",selected?"text-[#ef6b32]":"text-stone-500",special&&"text-[#ef6b32]")}><span className={cn("grid size-8 place-items-center rounded-xl transition-colors",special&&"absolute -top-5 size-14 rounded-2xl bg-[#ef6b32] text-white shadow-[0_8px_22px_rgba(239,107,50,.35)] hover:bg-[#d95320]")}><Icon className={cn("size-5",special&&"size-7")}/></span><span className={cn(special&&"mt-9")}>{label}</span></Link>})}</nav>
+    <nav aria-label="주요 메뉴" className="fixed inset-x-0 bottom-0 z-50 grid h-[76px] grid-cols-5 border-t border-stone-200 bg-white/95 px-2 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">{mobilePrimary.map(({href,label,icon:Icon,special,disabled})=>{const selected=!disabled&&(href==="/settings/store"?pathname.startsWith("/settings"):active(href));return <Link key={href} href={href} onClick={(event)=>{if(disabled){event.preventDefault();toast("성과 기능은 준비 중이에요.","info")}}} aria-disabled={disabled||undefined} className={cn("focus-ring relative flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl text-[11px] font-semibold transition-colors hover:bg-orange-50/70 hover:text-[#ef6b32]",selected?"text-[#ef6b32]":"text-stone-500",special&&"text-[#ef6b32]")}><span className={cn("grid size-8 place-items-center rounded-xl transition-colors",special&&"absolute -top-5 size-14 rounded-2xl bg-[#ef6b32] text-white shadow-[0_8px_22px_rgba(239,107,50,.35)] hover:bg-[#d95320]")}><Icon className={cn("size-5",special&&"size-7")}/></span><span className={cn(special&&"mt-9")}>{label}</span></Link>})}</nav>
   </div>;
 }

@@ -10,7 +10,7 @@ import { z } from "zod";
 import { AuthShell } from "@/features/auth/auth-shell";
 import { Button } from "@/components/common/ui";
 import { useToast } from "@/components/common/providers";
-import { mockApi } from "@/lib/api/mock-api";
+import { backendApi } from "@/lib/api/backend-api";
 
 const schema = z.object({
   name: z.string().trim().min(1, "매장명을 입력해 주세요."),
@@ -44,7 +44,12 @@ export default function FirstStorePage() {
   });
 
   const createStore = useMutation({
-    mutationFn: mockApi.createFirstStore,
+    mutationFn: async (values: Values) => {
+      const coordinateResponse = await fetch(`/internal/address/coordinates?address=${encodeURIComponent(values.address)}`);
+      const coordinates = await coordinateResponse.json() as { latitude?: number; longitude?: number; message?: string };
+      if (!coordinateResponse.ok || coordinates.latitude === undefined || coordinates.longitude === undefined) throw new Error(coordinates.message ?? "주소 좌표를 찾지 못했어요.");
+      return backendApi.createFirstStore({ ...values, latitude: coordinates.latitude, longitude: coordinates.longitude });
+    },
     onSuccess: (store) => {
       queryClient.setQueryData(["store"], store);
       queryClient.setQueryData(["stores"], [store]);

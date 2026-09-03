@@ -6,7 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { LogOut, Trash2 } from "lucide-react";
 import { Button, ConfirmDialog, PageHeader } from "@/components/common/ui";
 import { useToast } from "@/components/common/providers";
-import { mockApi } from "@/lib/api/mock-api";
+import { backendApi } from "@/lib/api/backend-api";
 
 const formatMobileNumber = (value?: string) => {
   const digits = value?.replace(/\D/g, "") ?? "";
@@ -20,9 +20,9 @@ export default function AccountSettingsPage() {
   const client = useQueryClient();
   const toast = useToast();
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const session = useQuery({ queryKey: ["session"], queryFn: mockApi.getSession });
-  const logout = useMutation({ mutationFn: mockApi.logout, onSuccess: () => { client.removeQueries(); toast("로그아웃했어요.", "info"); router.replace("/login"); } });
-  const withdraw = useMutation({ mutationFn: mockApi.withdrawAccount, onSuccess: () => { client.removeQueries(); setConfirmOpen(false); toast("회원탈퇴가 완료됐어요.", "info"); router.replace("/"); } });
+  const session = useQuery({ queryKey: ["session"], queryFn: backendApi.getSession });
+  const logout = useMutation({ mutationFn: backendApi.logout, onSuccess: () => { client.removeQueries(); toast("로그아웃했어요.", "info"); router.replace("/login"); } });
+  const withdraw = useMutation({ mutationFn: backendApi.withdrawAccount, onSuccess: () => { client.removeQueries(); setConfirmOpen(false); toast("회원탈퇴가 완료됐어요.", "info"); router.replace("/"); } });
   const user = session.data?.user;
 
   return <>

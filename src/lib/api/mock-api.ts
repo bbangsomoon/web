@@ -47,6 +47,13 @@ const readStores = (): Store[] => {
   localStorage.setItem(KEYS.hoursDefaultClosed, "true");
   return write(KEYS.stores, stores);
 };
+const readContents = (): Content[] => {
+  const contents = read<Array<Content | (Omit<Content, "status"> & { status: "generated" })>>(KEYS.contents, initialContents);
+  const hasLegacyStatus = contents.some((content) => content.status === "generated");
+  const normalized = contents.map((content) => content.status === "generated" ? { ...content, status: "draft" as const } : content);
+  if (hasLegacyStatus) write(KEYS.contents, normalized);
+  return normalized;
+};
 
 export const mockApi = {
   async getSession(): Promise<AuthSession | null> {
@@ -76,21 +83,22 @@ export const mockApi = {
     await wait(800);
     if (typeof window !== "undefined") Object.keys(localStorage).filter((key) => key.startsWith("bbangsomoon.")).forEach((key) => localStorage.removeItem(key));
   },
-  async getContents(): Promise<Content[]> { await wait(); return read(KEYS.contents, initialContents).sort((a,b) => +new Date(b.createdAt) - +new Date(a.createdAt)); },
-  async getContent(id: string): Promise<Content> { await wait(260); const found = read(KEYS.contents, initialContents).find((c) => c.id === id); if (!found) throw new Error("콘텐츠를 찾을 수 없어요."); return found; },
+  async getContents(): Promise<Content[]> { await wait(); return readContents().sort((a,b) => +new Date(b.createdAt) - +new Date(a.createdAt)); },
+  async getContent(id: string): Promise<Content> { await wait(260); const found = readContents().find((c) => c.id === id); if (!found) throw new Error("콘텐츠를 찾을 수 없어요."); return found; },
   async createContent(request: ContentGenerationRequest): Promise<Content> {
-    await wait(1500); const all = read(KEYS.contents, initialContents); const id = String(Date.now());
-    const content: Content = { id, title: `오늘의 ${request.breadName}`, ...request,
-      body: `오늘 ${request.breadName}이(가) 맛있게 구워졌어요. ${request.highlights || "정성껏 반죽해 고소하고 편안한 맛을 담았습니다."}\n\n${request.promotion || "동네 산책길에 편하게 들러 주세요."}`,
-      hashtags: ["소문빵집", "동네빵집", request.breadName.replaceAll(" ", ""), "오늘의빵"], status: "generated",
-      assets: request.media.map((asset,i) => ({ id: `asset-${id}-${i}`, type: asset.type, url: asset.url, alt: request.breadName })), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    await wait(1500); const all = readContents(); const id = String(Date.now());
+    const title = request.prompt.split(/[.!?\n]/)[0]?.trim().slice(0, 36) || "새 매장 소식";
+    const content: Content = { id, title, breadName: "매장 소식", additionalRequest: request.prompt, tone: "friendly", purpose: "event", format: "feed",
+      body: `${request.prompt}\n\n매장의 분위기가 자연스럽게 전해지도록 홍보 문구를 만들었어요. 편하게 방문해 주세요.`,
+      hashtags: ["빵소문", "동네매장", "매장소식"], status: "draft",
+      assets: request.media.map((asset,i) => ({ id: `asset-${id}-${i}`, type: asset.type, url: asset.url, alt: "홍보 콘텐츠 첨부 미디어" })), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
     };
     write(KEYS.contents, [content, ...all]); return content;
   },
-  async updateContent(id: string, patch: Partial<Content>): Promise<Content> { await wait(); const all = read(KEYS.contents, initialContents); const current = all.find((c) => c.id === id); if (!current) throw new Error("콘텐츠를 찾을 수 없어요."); const next = { ...current, ...patch, updatedAt: new Date().toISOString() }; write(KEYS.contents, all.map((c) => c.id === id ? next : c)); return next; },
-  async deleteContent(id: string): Promise<void> { await wait(); write(KEYS.contents, read(KEYS.contents, initialContents).filter((c) => c.id !== id)); },
-  async regenerateContent(id: string): Promise<Content> { const item = await this.getContent(id); const variations = [`고소한 향이 골목까지 퍼지는 오늘의 ${item.breadName}. 한입 베어 물면 바삭한 결 사이로 부드러운 속살이 느껴져요. 갓 구운 지금, 소문빵집에서 만나요.`, `오늘의 작은 기쁨을 구웠습니다. 정성껏 만든 ${item.breadName}, 따뜻할 때 가장 맛있어요. 산책하듯 가볍게 들러 주세요.`]; return this.updateContent(id, { body: variations[Math.floor(Math.random()*variations.length)] }); },
-  async publishContent(id: string, mode: "now" | "scheduled", scheduledAt?: string): Promise<Content> { await wait(700); return this.updateContent(id, mode === "now" ? { status: "published", publishedAt: new Date().toISOString(), insight: { views: 0, likes: 0, saves: 0, comments: 0 } } : { status: "scheduled", scheduledAt }); },
+  async updateContent(id: string, patch: Partial<Content>): Promise<Content> { await wait(); const all = readContents(); const current = all.find((c) => c.id === id); if (!current) throw new Error("콘텐츠를 찾을 수 없어요."); const next = { ...current, ...patch, updatedAt: new Date().toISOString() }; write(KEYS.contents, all.map((c) => c.id === id ? next : c)); return next; },
+  async deleteContent(id: string): Promise<void> { await wait(); write(KEYS.contents, readContents().filter((c) => c.id !== id)); },
+  async regenerateContent(id: string): Promise<Content> { const item = await this.getContent(id); const request = item.additionalRequest || "매장의 새로운 소식을 알려 주세요."; const variations = [`${request}\n\n전하고 싶은 내용이 자연스럽게 닿을 수 있도록 준비했어요. 소문빵집에서 자세히 만나 보세요.`, `오늘 전해 드릴 매장 소식이 있어요.\n\n${request}\n\n궁금한 점은 편하게 문의해 주세요.`]; return this.updateContent(id, { body: variations[Math.floor(Math.random()*variations.length)] }); },
+  async publishContent(id: string, mode: "now" | "scheduled", scheduledAt?: string): Promise<Content> { await wait(700); return this.updateContent(id, mode === "now" ? { status: "published", publishedAt: new Date().toISOString(), scheduledAt: undefined, insight: { views: 0, likes: 0, saves: 0, comments: 0 } } : { status: "scheduled", scheduledAt, publishedAt: undefined }); },
   async getStore(): Promise<Store> {
     await wait(250);
     const stores = readStores();

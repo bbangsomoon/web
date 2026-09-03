@@ -25,7 +25,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     window.setTimeout(() => setToast((current) => current?.id === id ? null : current), 3000);
   }, []);
   const [queryClient] = useState(() => new QueryClient({
-    mutationCache: new MutationCache({ onError: () => showToast("요청을 처리하지 못했어요. 잠시 후 다시 시도해 주세요.", "error") }),
+    mutationCache: new MutationCache({ onError: (error) => showToast(error instanceof Error ? error.message : "요청을 처리하지 못했어요. 잠시 후 다시 시도해 주세요.", "error") }),
     defaultOptions: { queries: { staleTime: 30_000, retry: 1 } },
   }));
   const meta = toast ? toastMeta[toast.variant] : null;
