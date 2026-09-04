@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -39,32 +38,42 @@ export default function ContentDetailPage() {
     },
   });
 
+  const publishNow = useMutation({
+    mutationFn: () => mockApi.publishContent(id, "now"),
+    onSuccess: (next) => {
+      client.setQueryData(["content", id], next);
+      client.invalidateQueries({ queryKey: ["contents"] });
+      toast("Instagram 피드에 게시했어요!");
+    },
+  });
+
   if (content.isLoading || social.isLoading) return <LoadingState />;
   if (content.isError || social.isError || !content.data || !social.data) return <ErrorState message="콘텐츠를 찾을 수 없어요." />;
 
   const data = content.data;
-  const displayTime = data.status === "scheduled" ? data.scheduledAt || data.updatedAt : data.status === "published" ? data.publishedAt || data.updatedAt : data.updatedAt;
-  const timeLabel = data.status === "scheduled" ? "예약 시간" : data.status === "published" ? "게시 시간" : "작성 시간";
-  const canPublish = ["draft", "failed"].includes(data.status);
+  const displayTime = data.status === "scheduled"
+    ? data.scheduledAt || data.updatedAt
+    : data.status === "published"
+      ? data.publishedAt || data.updatedAt
+      : data.status === "failed"
+        ? data.failedAt || data.updatedAt
+        : data.updatedAt;
+  const timeLabel = data.status === "scheduled" ? "예약 시간" : data.status === "published" ? "게시 시간" : data.status === "failed" ? "실패 시간" : "작성 시간";
+  const previewTimeLabel = data.status === "published" ? formatDate(displayTime) : data.status === "scheduled" ? "예약 게시 예정" : data.status === "failed" ? "게시 실패" : "아직 게시되지 않음";
 
   return <div className="mx-auto max-w-5xl">
-    <PageHeader title="콘텐츠 상세" backHref="/contents" action={<Badge status={data.status} />} />
+    <PageHeader className="mb-10" title="콘텐츠 상세" backHref="/contents" />
     <div className="grid items-start gap-6 lg:grid-cols-[minmax(320px,.9fr)_1.1fr]">
-      <section>
-        <h2 className="mb-3 text-sm font-bold">Instagram 피드</h2>
-        <InstagramFeedPreview
-          assets={data.assets}
-          body={data.body}
-          hashtags={data.hashtags}
-          handle={social.data.handle}
-          likes={data.insight?.likes}
-          timeLabel={data.status === "published" ? formatDate(displayTime) : data.status === "scheduled" ? "예약 게시 예정" : "아직 게시되지 않음"}
-        />
+      <section className="relative">
+        <h2 className="mb-3 text-sm font-bold lg:absolute lg:-top-6 lg:left-0 lg:mb-0">Instagram 피드 미리보기</h2>
+        <InstagramFeedPreview assets={data.assets} body={data.body} hashtags={data.hashtags} handle={social.data.handle} likes={data.insight?.likes} timeLabel={previewTimeLabel} />
       </section>
 
       <section className="surface rounded-[28px] p-5 sm:p-8">
-        <h2 className="text-lg font-black text-stone-900">게시 정보</h2>
-
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-lg font-black text-stone-900">게시 정보</h2>
+          <Badge status={data.status} className="shrink-0 px-3 py-1.5 text-sm" />
+        </div>
         <div className="mt-6 flex items-center gap-2 rounded-2xl bg-stone-50 px-4 py-3 text-sm font-bold text-stone-500"><CalendarClock className="size-4 text-[#ef6b32]" />{timeLabel}<span className="ml-auto text-stone-700">{formatDate(displayTime, true)}</span></div>
 
         <div className="mt-7"><h3 className="text-sm font-black">게시글 문구</h3><p className="mt-3 whitespace-pre-line text-sm leading-7 text-stone-700">{data.body}</p></div>
@@ -77,12 +86,12 @@ export default function ContentDetailPage() {
           { icon: MessageCircle, label: "댓글", value: data.insight.comments },
         ].map(({ icon: Icon, label, value }) => <div key={label} className="rounded-2xl bg-stone-50 p-3 text-center"><Icon className="mx-auto size-4 text-[#ef6b32]" /><strong className="mt-2 block text-base">{value.toLocaleString()}</strong><span className="text-[10px] text-stone-400">{label}</span></div>)}</div></div>}
 
-        <div className="mt-8 grid gap-2 sm:grid-cols-2">
-          <Link href={`/contents/${id}/edit`} className="focus-ring inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-stone-200 bg-white px-4 text-sm font-bold hover:bg-stone-50"><Pencil className="size-4" />수정하기</Link>
-          {canPublish && <Link href={`/contents/${id}/edit`} className="focus-ring inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#ef6b32] px-4 text-sm font-bold text-white"><Send className="size-4" />게시하기</Link>}
-          {data.status === "scheduled" && <Button variant="secondary" onClick={() => setConfirm("cancel")}><CalendarClock className="size-4" />예약 취소</Button>}
+        <div className="mt-8">
+          {data.status === "published" && <div className="grid gap-2 sm:grid-cols-2"><Button variant="danger" onClick={() => setConfirm("delete")}><Trash2 className="size-4" />삭제하기</Button><Button variant="secondary" onClick={() => router.push(`/contents/${id}/edit`)}><Pencil className="size-4" />수정하기</Button></div>}
+          {data.status === "scheduled" && <div className="grid gap-2 sm:grid-cols-3"><Button variant="danger" onClick={() => setConfirm("delete")}><Trash2 className="size-4" />삭제하기</Button><Button variant="secondary" onClick={() => setConfirm("cancel")}><CalendarClock className="size-4" />예약 취소</Button><Button variant="secondary" onClick={() => router.push(`/contents/${id}/edit`)}><Pencil className="size-4" />수정하기</Button></div>}
+          {data.status === "failed" && <div className="grid gap-2 sm:grid-cols-3"><Button variant="danger" onClick={() => setConfirm("delete")}><Trash2 className="size-4" />삭제하기</Button><Button variant="secondary" onClick={() => router.push(`/contents/${id}/edit`)}><Pencil className="size-4" />수정하기</Button><Button onClick={() => publishNow.mutate()} disabled={publishNow.isPending}><Send className="size-4" />게시하기</Button></div>}
+          {data.status === "draft" && <div className="grid gap-2 sm:grid-cols-2"><Button variant="danger" onClick={() => setConfirm("delete")}><Trash2 className="size-4" />삭제하기</Button><Button variant="secondary" onClick={() => router.push(`/contents/${id}/edit`)}><Pencil className="size-4" />이어서 작성하기</Button></div>}
         </div>
-        <button type="button" onClick={() => setConfirm("delete")} className="focus-ring mx-auto mt-5 flex items-center gap-1 rounded-lg p-2 text-xs font-bold text-stone-400 hover:text-red-600"><Trash2 className="size-4" />이 콘텐츠 삭제</button>
       </section>
     </div>
 

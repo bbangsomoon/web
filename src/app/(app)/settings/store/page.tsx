@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Script from "next/script";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -10,9 +10,9 @@ import { z } from "zod";
 import { Button, ErrorState, LoadingState, PageHeader } from "@/components/common/ui";
 import { useToast } from "@/components/common/providers";
 import { MenuManagerDialog } from "@/components/settings/menu-manager-dialog";
-import { mockApi } from "@/lib/api/mock-api";
+import { backendApi } from "@/lib/api/backend-api";
 import { cn } from "@/lib/utils";
-import type { StoreAmenity, StoreBusinessHour, StoreWeekday } from "@/types";
+import type { Store, StoreAmenity, StoreBusinessHour, StoreWeekday } from "@/types";
 
 const amenityValues = ["parking", "takeout", "reservation", "delivery", "petFriendly", "wifi"] as const;
 const amenityLabels: Record<StoreAmenity, string> = {
@@ -49,8 +49,8 @@ const menuSchema = z.object({
   id: z.string(),
   category: z.string(),
   name: z.string(),
-  price: z.number(),
-  description: z.string(),
+  price: z.number().int().min(100).max(1_000_000),
+  description: z.string().max(100),
   imageUrl: z.string(),
   soldOut: z.boolean(),
 });
@@ -117,51 +117,95 @@ const defaultValues: Values = {
   menus: [],
 };
 
+const normalizeWeeklyHours = (hours: StoreBusinessHour[]) => {
+  const hoursByDay = new Map(hours.map((item) => [item.day, item]));
+  return defaultWeeklyHours.map((defaultHours) => ({ ...defaultHours, ...hoursByDay.get(defaultHours.day) }));
+};
+
+const toFormValues = (store: Store): Values => ({
+  name: store.name,
+  description: store.description,
+  postalCode: store.postalCode,
+  address: store.address,
+  addressDetail: store.addressDetail,
+  phone: store.phone,
+  representativeName: store.representativeName,
+  businessRegistrationNumber: store.businessRegistrationNumber,
+  weeklyHours: normalizeWeeklyHours(store.weeklyHours),
+  businessHours: store.businessHours,
+  temporaryClosureStart: store.temporaryClosureStart,
+  temporaryClosureEnd: store.temporaryClosureEnd,
+  temporaryClosureReason: store.temporaryClosureReason,
+  amenities: store.amenities,
+  menus: store.menus,
+});
+
 export default function StoreSettingsPage() {
   const client = useQueryClient();
   const toast = useToast();
   const [menuDialogOpen, setMenuDialogOpen] = useState(false);
   const [postcodeReady, setPostcodeReady] = useState(false);
   const [activeTab, setActiveTab] = useState<StoreTab>("basic");
-  const query = useQuery({ queryKey: ["store"], queryFn: mockApi.getStore });
+  const [activeStoreId, setActiveStoreId] = useState(() => typeof window === "undefined" ? "" : localStorage.getItem("bbangsomoon.active-store") ?? "");
+  const stores = useQuery({ queryKey: ["stores"], queryFn: backendApi.getStores });
+  const selectedStoreId = activeStoreId && stores.data?.some((store) => store.id === activeStoreId) ? activeStoreId : stores.data?.[0]?.id ?? "";
+  const query = useQuery({ queryKey: ["store", selectedStoreId], queryFn: () => backendApi.getStore(selectedStoreId), enabled: Boolean(selectedStoreId) });
+  useEffect(() => {
+    const updateActiveStore = () => setActiveStoreId(localStorage.getItem("bbangsomoon.active-store") ?? "");
+    window.addEventListener("bbangsomoon:store-change", updateActiveStore);
+    return () => window.removeEventListener("bbangsomoon:store-change", updateActiveStore);
+  }, []);
   const {
     register,
     reset,
     control,
     setValue,
     handleSubmit,
-    formState: { errors },
+    formState: { dirtyFields, errors, isDirty },
   } = useForm<Values>({ resolver: zodResolver(schema), defaultValues });
   const values = useWatch({ control });
   const amenities = useWatch({ control, name: "amenities" });
   const menus = useWatch({ control, name: "menus" });
   const weeklyHours = useWatch({ control, name: "weeklyHours" });
+  const changedFields = useMemo(() => [
+    dirtyFields.name && { label: "매장 이름", targetId: "store-field-name" },
+    dirtyFields.description && { label: "매장 소개", targetId: "store-field-description" },
+    (dirtyFields.address || dirtyFields.postalCode) && { label: "주소", targetId: "store-field-address" },
+    dirtyFields.addressDetail && { label: "상세 주소", targetId: "store-field-address-detail" },
+    dirtyFields.phone && { label: "전화번호", targetId: "store-field-phone" },
+    dirtyFields.weeklyHours && { label: "요일별 영업시간", targetId: "store-field-weekly-hours" },
+    dirtyFields.businessHours && { label: "추가 영업 안내", targetId: "store-field-business-hours" },
+    (dirtyFields.temporaryClosureStart || dirtyFields.temporaryClosureEnd || dirtyFields.temporaryClosureReason) && { label: "임시 휴무", targetId: "store-field-temporary-closure" },
+    dirtyFields.menus && { label: "메뉴", targetId: "store-section-menus" },
+    dirtyFields.amenities && { label: "이용 정보", targetId: "store-section-amenities" },
+  ].filter((field): field is { label: string; targetId: string } => Boolean(field)), [dirtyFields]);
+  const changedFieldLabels = useMemo(() => changedFields.map((field) => field.label), [changedFields]);
 
   useEffect(() => {
     if (!query.data) return;
-    reset({
-      name: query.data.name,
-      description: query.data.description,
-      postalCode: query.data.postalCode,
-      address: query.data.address,
-      addressDetail: query.data.addressDetail,
-      phone: query.data.phone,
-      representativeName: query.data.representativeName,
-      businessRegistrationNumber: query.data.businessRegistrationNumber,
-      weeklyHours: query.data.weeklyHours,
-      businessHours: query.data.businessHours,
-      temporaryClosureStart: query.data.temporaryClosureStart,
-      temporaryClosureEnd: query.data.temporaryClosureEnd,
-      temporaryClosureReason: query.data.temporaryClosureReason,
-      amenities: query.data.amenities,
-      menus: query.data.menus,
-    });
+    reset(toFormValues(query.data));
   }, [query.data, reset]);
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("bbangsomoon:store-settings-dirty", { detail: { isDirty, sections: changedFieldLabels } }));
+  }, [changedFieldLabels, isDirty]);
+  useEffect(() => () => {
+    window.dispatchEvent(new CustomEvent("bbangsomoon:store-settings-dirty", { detail: { isDirty: false, sections: [] } }));
+  }, []);
+  useEffect(() => {
+    const scrollToFirstChangedField = () => {
+      const targetId = changedFields[0]?.targetId;
+      if (targetId) document.getElementById(targetId)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    };
+    window.addEventListener("bbangsomoon:store-settings-focus-first-dirty", scrollToFirstChangedField);
+    return () => window.removeEventListener("bbangsomoon:store-settings-focus-first-dirty", scrollToFirstChangedField);
+  }, [changedFields]);
 
   const save = useMutation({
-    mutationFn: (nextValues: Values) => mockApi.updateStore({ ...query.data!, ...nextValues }),
+    mutationFn: (nextValues: Values) => backendApi.updateStore(query.data!, { ...query.data!, ...nextValues }),
     onSuccess: (next) => {
-      client.setQueryData(["store"], next);
+      client.setQueryData(["store", next.id], next);
+      client.invalidateQueries({ queryKey: ["stores"] });
+      reset(toFormValues(next));
       toast("매장 정보를 저장했어요.");
     },
   });
@@ -179,7 +223,12 @@ export default function StoreSettingsPage() {
 
   const selectTab = (tab: StoreTab) => {
     setActiveTab(tab);
-    window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }));
+    document.getElementById(`store-section-${tab}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const cancelChanges = () => {
+    reset(toFormValues(query.data!));
+    toast("수정한 내용을 취소했어요.", "info");
   };
 
   const openAddressSearch = () => {
@@ -196,13 +245,13 @@ export default function StoreSettingsPage() {
     }).open({ popupTitle: "빵소문 주소 검색" });
   };
 
-  if (query.isLoading) return <LoadingState />;
-  if (query.isError || !query.data) return <ErrorState />;
+  if (stores.isLoading || !selectedStoreId || query.isLoading) return <LoadingState />;
+  if (stores.isError || query.isError || !query.data) return <ErrorState />;
 
   return (
-    <>
+    <div className="mx-auto max-w-5xl">
       <PageHeader title="매장 관리" />
-      <div className="max-w-5xl">
+      <div>
       <Script
         id="kakao-postcode"
         src="https://t1.kakaocdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"
@@ -210,32 +259,42 @@ export default function StoreSettingsPage() {
         onReady={() => setPostcodeReady(true)}
         onError={() => toast("주소 검색 서비스를 불러오지 못했어요.", "error")}
       />
-      <form onSubmit={handleSubmit((nextValues) => save.mutate(nextValues), (formErrors) => { if (formErrors.name || formErrors.address || formErrors.phone || formErrors.representativeName || formErrors.businessRegistrationNumber) selectTab("basic"); })}>
+      <form
+        noValidate
+        onSubmit={handleSubmit(
+          (nextValues) => save.mutate(nextValues),
+          (formErrors) => {
+            if (formErrors.name || formErrors.address || formErrors.phone || formErrors.representativeName || formErrors.businessRegistrationNumber) {
+              toast("기본 정보의 필수 항목을 확인해 주세요.", "error");
+            }
+          },
+        )}
+      >
         <div className="grid items-start gap-5 lg:grid-cols-[160px_minmax(0,1fr)]">
           <aside className="sticky top-[104px] hidden lg:block">
             <div className="surface rounded-2xl p-2">
-              <div role="tablist" aria-label="매장 정보 항목" aria-orientation="vertical" className="space-y-1">
+              <nav aria-label="매장 정보 이동" className="space-y-1">
                 {storeTabs.map((tab) => {
                   const selected = activeTab === tab.value;
-                  return <button key={tab.value} type="button" role="tab" aria-selected={selected} onClick={() => selectTab(tab.value)} className={cn("focus-ring flex min-h-11 w-full items-center rounded-xl px-3 text-left text-sm font-bold transition", selected ? "bg-[#efe7dc] text-[#5c4635] shadow-sm" : "text-stone-500 hover:bg-stone-100 hover:text-stone-800")}>{tab.label}{selected && <ChevronRight className="ml-auto size-4" aria-hidden />}</button>;
+                  return <button key={tab.value} type="button" aria-current={selected ? "location" : undefined} onClick={() => selectTab(tab.value)} className={cn("focus-ring flex min-h-11 w-full items-center rounded-xl px-3 text-left text-sm font-bold transition", selected ? "bg-[#efe7dc] text-[#5c4635] shadow-sm" : "text-stone-500 hover:bg-stone-100 hover:text-stone-800")}>{tab.label}{selected && <ChevronRight className="ml-auto size-4" aria-hidden />}</button>;
                 })}
-              </div>
+              </nav>
               <div className="mt-2 border-t border-stone-200 pt-2">
-                <Button type="submit" disabled={save.isPending} className="min-h-11 w-full px-2">{save.isPending ? "저장 중" : "매장 정보 저장"}</Button>
+                <Button type="submit" disabled={!isDirty || save.isPending} className="min-h-11 w-full px-2">{save.isPending ? "저장 중" : "정보 저장하기"}</Button>
+                {isDirty && <Button type="button" variant="secondary" onClick={cancelChanges} disabled={save.isPending} className="mt-2 min-h-11 w-full px-2">수정 취소</Button>}
               </div>
             </div>
           </aside>
 
           <div className="space-y-5">
-        <div role="tablist" aria-label="매장 정보 항목" className="mx-auto grid max-w-xl grid-cols-4 gap-1 rounded-2xl border border-stone-200 bg-white p-1.5 shadow-sm lg:hidden">
+        <nav aria-label="매장 정보 이동" className="mx-auto grid max-w-xl grid-cols-4 gap-1 rounded-2xl border border-stone-200 bg-white p-1.5 shadow-sm lg:hidden">
           {storeTabs.map((tab) => {
             const selected = activeTab === tab.value;
-            return <button key={tab.value} type="button" role="tab" aria-selected={selected} onClick={() => selectTab(tab.value)} className={cn("focus-ring min-h-10 rounded-xl px-2 text-xs font-bold transition sm:text-sm", selected ? "bg-[#efe7dc] text-[#5c4635] shadow-sm" : "text-stone-500 hover:bg-stone-100 hover:text-stone-800")}>{tab.label}</button>;
+            return <button key={tab.value} type="button" aria-current={selected ? "location" : undefined} onClick={() => selectTab(tab.value)} className={cn("focus-ring min-h-10 rounded-xl px-2 text-xs font-bold transition sm:text-sm", selected ? "bg-[#efe7dc] text-[#5c4635] shadow-sm" : "text-stone-500 hover:bg-stone-100 hover:text-stone-800")}>{tab.label}</button>;
           })}
-        </div>
+        </nav>
 
-        {activeTab === "basic" && (
-        <section className="surface mx-auto max-w-xl rounded-[28px] p-5 sm:p-7">
+        <section id="store-section-basic" className="surface mx-auto max-w-xl scroll-mt-6 rounded-[28px] p-5 sm:p-7">
           <div className="flex items-center gap-2">
             <StoreIcon className="size-5 text-[#ef6b32]" />
             <h2 className="text-lg font-black">기본 정보</h2>
@@ -243,14 +302,14 @@ export default function StoreSettingsPage() {
           <div className="mt-6 grid gap-5 sm:grid-cols-2">
             <label className="sm:col-span-2">
               <span className="mb-2 block text-sm font-bold">매장 이름 <b className="text-[#ef6b32]">*</b></span>
-              <input {...register("name")} required className="field" />
+              <input {...register("name")} required id="store-field-name" className={cn("field scroll-mt-6", dirtyFields.name && "!border-2 !border-red-400")} />
               {errors.name && <span className="mt-1 block text-xs text-red-600">{errors.name.message}</span>}
             </label>
             <label className="sm:col-span-2">
               <span className="mb-2 block text-sm font-bold">매장 소개</span>
-              <textarea {...register("description")} rows={4} className="field resize-none" placeholder="손님에게 보여줄 매장 소개를 적어 주세요." />
+              <textarea {...register("description")} id="store-field-description" rows={4} className={cn("field scroll-mt-6 resize-none", dirtyFields.description && "!border-2 !border-red-400")} placeholder="손님에게도 보여지고 AI 콘텐츠 만들기에도 참고돼요. 우리 매장을 자세히 소개해 주세요." />
             </label>
-            <div className="sm:col-span-2">
+            <div id="store-field-address" className="scroll-mt-6 sm:col-span-2">
               <span className="mb-2 flex items-center gap-1 text-sm font-bold"><MapPin className="size-4" />주소 <b className="text-[#ef6b32]">*</b></span>
               <div className="grid grid-cols-[minmax(0,1fr)_96px] gap-2">
                 <input
@@ -262,38 +321,37 @@ export default function StoreSettingsPage() {
                   aria-label="주소 검색 열기"
                   onClick={openAddressSearch}
                   onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openAddressSearch(); } }}
-                  className="field cursor-pointer"
+                  className={cn("field cursor-pointer", (dirtyFields.address || dirtyFields.postalCode) && "!border-2 !border-red-400")}
                   placeholder={postcodeReady ? "눌러서 주소를 검색하세요." : "주소 검색 준비 중"}
                 />
-                <input {...register("postalCode")} readOnly aria-label="우편번호" className="field px-2 text-center text-sm text-stone-500" placeholder="우편번호" />
+                <input {...register("postalCode")} readOnly aria-label="우편번호" className={cn("field px-2 text-center text-sm text-stone-500", (dirtyFields.address || dirtyFields.postalCode) && "!border-2 !border-red-400")} placeholder="우편번호" />
               </div>
               {errors.address && <span className="mt-1 block text-xs text-red-600">{errors.address.message}</span>}
-              <input {...register("addressDetail")} className="field mt-2" placeholder="상세 주소를 입력해 주세요." />
+              <input {...register("addressDetail")} id="store-field-address-detail" className={cn("field mt-2 scroll-mt-6", dirtyFields.addressDetail && "!border-2 !border-red-400")} placeholder="상세 주소를 입력해 주세요." />
             </div>
             <label className="sm:col-span-2">
               <span className="mb-2 block text-sm font-bold">전화번호 <b className="text-[#ef6b32]">*</b></span>
-              <input {...register("phone")} required className="field" inputMode="tel" />
+              <input {...register("phone")} required id="store-field-phone" className={cn("field scroll-mt-6", dirtyFields.phone && "!border-2 !border-red-400")} inputMode="tel" />
               {errors.phone && <span className="mt-1 block text-xs text-red-600">{errors.phone.message}</span>}
             </label>
             <div className="mt-1 border-t border-stone-200 pt-5 sm:col-span-2">
               <h3 className="text-base font-black">사업자 정보</h3>
               <div className="mt-4 grid gap-5 sm:grid-cols-2">
-                <label><span className="mb-2 block text-sm font-bold">대표자명 <b className="text-[#ef6b32]">*</b></span><input {...register("representativeName")} required className="field" placeholder="예: 김소문" />{errors.representativeName && <span className="mt-1 block text-xs text-red-600">{errors.representativeName.message}</span>}</label>
-                <label><span className="mb-2 block text-sm font-bold">사업자등록번호 <b className="text-[#ef6b32]">*</b></span><input {...register("businessRegistrationNumber")} required inputMode="numeric" maxLength={12} className="field" placeholder="123-45-67890" />{errors.businessRegistrationNumber && <span className="mt-1 block text-xs text-red-600">{errors.businessRegistrationNumber.message}</span>}</label>
+                <label><span className="mb-2 block text-sm font-bold">대표자명</span><input {...register("representativeName")} readOnly tabIndex={-1} aria-readonly="true" className="field pointer-events-none !border-stone-200 !bg-stone-100 !text-stone-500" />{errors.representativeName && <span className="mt-1 block text-xs text-red-600">{errors.representativeName.message}</span>}</label>
+                <label><span className="mb-2 block text-sm font-bold">사업자등록번호</span><input {...register("businessRegistrationNumber")} readOnly tabIndex={-1} aria-readonly="true" className="field pointer-events-none !border-stone-200 !bg-stone-100 !text-stone-500" />{errors.businessRegistrationNumber && <span className="mt-1 block text-xs text-red-600">{errors.businessRegistrationNumber.message}</span>}</label>
               </div>
+              <p className="mt-3 text-xs leading-5 text-stone-500">사업자 정보는 변경이 필요하면 문의해 주세요.</p>
             </div>
           </div>
         </section>
-        )}
 
-        {activeTab === "hours" && (
-        <section className="surface mx-auto max-w-xl rounded-[28px] p-5 sm:p-7">
+        <section id="store-section-hours" className="surface mx-auto max-w-xl scroll-mt-6 rounded-[28px] p-5 sm:p-7">
           <div className="flex items-center gap-2">
             <Clock3 className="size-5 text-[#ef6b32]" />
             <h2 className="text-lg font-black">영업 정보</h2>
           </div>
           <div className="mt-6 grid gap-5 sm:grid-cols-2">
-            <fieldset className="sm:col-span-2">
+            <fieldset id="store-field-weekly-hours" className={cn("scroll-mt-6 rounded-2xl sm:col-span-2", dirtyFields.weeklyHours && "border-2 border-red-400 p-3 sm:p-4")}>
               <legend className="text-sm font-bold">요일별 영업시간</legend>
               <p className="mt-1 text-xs leading-5 text-stone-500">영업하는 요일을 선택한 뒤 시작과 종료 시간을 설정해 주세요.</p>
               <div className="mt-4 space-y-2">
@@ -316,9 +374,9 @@ export default function StoreSettingsPage() {
             <label className="sm:col-span-2">
               <span className="block text-sm font-bold">추가 영업 안내</span>
               <span className="mb-2 mt-1 block text-xs leading-5 text-stone-400">브레이크 타임이나 특정 요일의 예외 운영 내용을 적어 주세요.</span>
-              <textarea {...register("businessHours")} rows={3} className="field resize-none" placeholder="예: 브레이크 타임 13:00–14:00 · 공휴일은 오후 6시 마감" />
+              <textarea {...register("businessHours")} id="store-field-business-hours" rows={3} className={cn("field scroll-mt-6 resize-none", dirtyFields.businessHours && "!border-2 !border-red-400")} placeholder="예: 브레이크 타임 13:00–14:00 · 공휴일은 오후 6시 마감" />
             </label>
-            <div className="sm:col-span-2">
+            <div id="store-field-temporary-closure" className={cn("scroll-mt-6 sm:col-span-2", (dirtyFields.temporaryClosureStart || dirtyFields.temporaryClosureEnd || dirtyFields.temporaryClosureReason) && "rounded-2xl border-2 border-red-400 p-3 sm:p-4")}>
               <span className="mb-2 block text-sm font-bold">임시 휴무</span>
               <div className="grid gap-3 sm:grid-cols-2">
                 <label><span className="mb-1.5 block text-xs font-bold text-stone-500">시작일</span><input type="date" {...register("temporaryClosureStart")} className="field" /></label>
@@ -328,10 +386,8 @@ export default function StoreSettingsPage() {
             </div>
           </div>
         </section>
-        )}
 
-        {activeTab === "menus" && (
-        <section className="surface mx-auto max-w-xl rounded-[28px] p-5 sm:p-7">
+        <section id="store-section-menus" className={cn("surface mx-auto max-w-xl scroll-mt-6 rounded-[28px] p-5 sm:p-7", dirtyFields.menus && "!border-2 !border-red-400")}>
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <div className="flex items-center gap-2">
@@ -346,17 +402,15 @@ export default function StoreSettingsPage() {
           </div>
           {menus.length > 0 ? (
             <div className="mt-5 flex flex-wrap gap-2">
-              {menus.slice(0, 8).map((menu) => <span key={menu.id} className="rounded-full border border-stone-200 bg-white px-3 py-1.5 text-xs font-bold text-stone-700">{menu.name}{menu.soldOut && <b className="ml-1 text-stone-400">· 품절</b>}</span>)}
+              {menus.slice(0, 8).map((menu) => <span key={menu.id} className="rounded-full border border-stone-200 bg-white px-3 py-1.5 text-xs font-bold text-stone-700">{menu.name}</span>)}
               {menus.length > 8 && <span className="rounded-full bg-stone-100 px-3 py-1.5 text-xs font-bold text-stone-500">+{menus.length - 8}개</span>}
             </div>
           ) : (
             <button type="button" onClick={() => setMenuDialogOpen(true)} className="focus-ring mt-5 w-full rounded-2xl border border-dashed border-stone-300 bg-stone-50 px-5 py-8 text-sm font-bold text-stone-500 hover:border-orange-300 hover:bg-orange-50 hover:text-[#d95320]">첫 메뉴 등록하기</button>
           )}
         </section>
-        )}
 
-        {activeTab === "amenities" && (
-        <section className="surface mx-auto max-w-xl rounded-[28px] p-5 sm:p-7">
+        <section id="store-section-amenities" className={cn("surface mx-auto max-w-xl scroll-mt-6 rounded-[28px] p-5 sm:p-7", dirtyFields.amenities && "!border-2 !border-red-400")}>
           <div className="flex items-center gap-2"><Info className="size-5 text-[#ef6b32]" /><h2 className="text-lg font-black">이용 정보</h2></div>
           <p className="mt-2 text-sm text-stone-500">손님이 방문 전에 확인할 수 있는 정보를 선택해 주세요.</p>
           <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -366,7 +420,6 @@ export default function StoreSettingsPage() {
             })}
           </div>
         </section>
-        )}
 
         <section className="mx-auto max-w-3xl overflow-hidden rounded-[28px] border border-orange-100 bg-orange-50/60">
           <div className="flex items-center gap-2 border-b border-orange-100 px-5 py-4 sm:px-7">
@@ -425,7 +478,7 @@ export default function StoreSettingsPage() {
           </div>
         </section>
 
-        <div className="mx-auto flex max-w-xl justify-center lg:hidden"><Button type="submit" disabled={save.isPending} className="min-h-14 w-full text-base">{save.isPending ? "저장하고 있어요" : "매장 정보 저장"}</Button></div>
+        <div className="mx-auto max-w-xl lg:hidden"><Button type="submit" disabled={!isDirty || save.isPending} className="min-h-14 w-full text-base">{save.isPending ? "저장하고 있어요" : "정보 저장하기"}</Button>{isDirty && <Button type="button" variant="secondary" onClick={cancelChanges} disabled={save.isPending} className="mt-2 min-h-12 w-full">수정 취소</Button>}</div>
           </div>
         </div>
       </form>
@@ -440,6 +493,6 @@ export default function StoreSettingsPage() {
         }}
       />
       </div>
-    </>
+    </div>
   );
 }

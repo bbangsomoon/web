@@ -15,9 +15,9 @@ export default function SocialSettingsPage() {
   if (isLoading) return <LoadingState />;
   if (isError || !data) return <ErrorState />;
 
-  return <>
+  return <div className="mx-auto max-w-3xl">
     <PageHeader title="SNS 관리" />
-    <div className="mx-auto max-w-3xl">
+    <div>
     <section className="surface overflow-hidden rounded-[28px]">
       <div className="flex items-center gap-3 bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 px-6 py-5 text-white"><InstagramIcon className="size-8" /><h2 className="text-xl font-black">Instagram</h2></div>
       <div className="p-5 sm:p-7">
@@ -28,5 +28,5 @@ export default function SocialSettingsPage() {
     <section className="mt-5 rounded-[28px] border border-stone-200 bg-white p-5 sm:p-7"><h2 className="flex items-center gap-2 font-black"><ShieldCheck className="size-5 text-emerald-600" />연결하면 무엇을 할 수 있나요?</h2><ul className="mt-5 space-y-4">{["연결한 SNS에 사진과 영상 콘텐츠를 게시하거나 예약할 수 있어요.", "여러 채널의 게시 상태와 고객 반응을 한곳에서 확인할 수 있어요.", "계정 비밀번호는 빵소문에 저장되지 않아요."].map((text) => <li key={text} className="flex gap-3 text-sm leading-6 text-stone-600"><CheckCircle2 className="mt-1 size-4 shrink-0 text-[#ef6b32]" />{text}</li>)}</ul><div className="mt-6 rounded-2xl bg-stone-50 p-4 text-xs leading-5 text-stone-500">SNS에 따라 비즈니스 또는 프로페셔널 계정 전환이 필요할 수 있어요. <span className="inline-flex items-center font-bold text-stone-700">도움말 <ExternalLink className="ml-1 size-3" /></span></div></section>
     <p className="mt-4 text-center text-xs text-stone-400">MVP에서는 실제 SNS 인증 대신 연결 상태만 체험할 수 있습니다.</p>
     </div>
-  </>;
+  </div>;
 }

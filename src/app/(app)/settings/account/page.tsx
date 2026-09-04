@@ -25,9 +25,9 @@ export default function AccountSettingsPage() {
   const withdraw = useMutation({ mutationFn: backendApi.withdrawAccount, onSuccess: () => { client.removeQueries(); setConfirmOpen(false); toast("회원탈퇴가 완료됐어요.", "info"); router.replace("/"); } });
   const user = session.data?.user;
 
-  return <>
+  return <div className="mx-auto max-w-3xl">
     <PageHeader title="계정 관리" />
-    <div className="mx-auto max-w-3xl">
+    <div>
     <section className="surface rounded-[28px] p-5 sm:p-7">
       <h2 className="text-lg font-semibold">계정 정보</h2>
       {user ? <dl className="mt-5 divide-y divide-stone-100 rounded-2xl border border-stone-200 px-4">
@@ -40,5 +40,5 @@ export default function AccountSettingsPage() {
     <section className="mt-5 rounded-[28px] border border-red-100 bg-white p-5 sm:p-7"><h2 className="text-lg font-semibold text-red-700">회원탈퇴</h2><Button variant="danger" className="mt-5" onClick={() => setConfirmOpen(true)}><Trash2 className="size-4" />회원탈퇴</Button></section>
     <ConfirmDialog open={confirmOpen} title="정말 회원탈퇴할까요?" description="저장된 콘텐츠와 매장 정보가 모두 삭제되며 되돌릴 수 없습니다." confirmLabel={withdraw.isPending ? "처리 중" : "탈퇴하기"} onClose={() => setConfirmOpen(false)} onConfirm={() => withdraw.mutate()} />
     </div>
-  </>;
+  </div>;
 }

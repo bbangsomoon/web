@@ -60,7 +60,7 @@ const texts = [
   "이번 주말, 동네 손님들을 위한 시식 테이블을 열어요. 편하게 들러 맛보고 인사 나눠요.",
 ];
 const statuses: Content["status"][] = ["published", "scheduled", "published", "draft", "failed", "draft", "scheduled", "published"];
-export const initialContents: Content[] = texts.map((body, index) => {
+export const initialContents: Content[] = texts.map<Content>((body, index) => {
   const createdAt = new Date(now - index * 86400000).toISOString();
   const status = statuses[index];
   return {
@@ -71,6 +71,7 @@ export const initialContents: Content[] = texts.map((body, index) => {
     status, assets: [{ id: `asset-${index}`, type: "image", url: photo, alt: "따뜻한 햇살 아래 놓인 갓 구운 빵" }], createdAt, updatedAt: createdAt,
     scheduledAt: status === "scheduled" ? new Date(now + (index + 1) * 3600000).toISOString() : undefined,
     publishedAt: status === "published" ? createdAt : undefined,
+    failedAt: status === "failed" ? createdAt : undefined,
     insight: status === "published" ? { views: 1240 - index * 83, likes: 118 - index * 8, saves: 34 - index * 2, comments: 12 - index } : undefined,
   };
-});
+}).filter((content) => content.id !== "4");

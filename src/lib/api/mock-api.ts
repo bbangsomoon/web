@@ -1,7 +1,7 @@
 import { initialContents, initialProducts, initialSocial, initialStore, initialStores } from "@/lib/mocks/data";
 import type { AuthSession, Content, ContentGenerationRequest, FirstStoreRequest, LoginRequest, Product, SignupRequest, SocialAccount, Store } from "@/types";
 
-const KEYS = { contents: "bbangsomoon.contents", stores: "bbangsomoon.stores", legacyStore: "bbangsomoon.store", activeStore: "bbangsomoon.active-store", social: "bbangsomoon.social", hoursDefaultClosed: "bbangsomoon.hours-default-closed-v1" } as const;
+const KEYS = { contents: "bbangsomoon.contents", contentSeedCleanup: "bbangsomoon.contents-seed-cleanup-v1", stores: "bbangsomoon.stores", legacyStore: "bbangsomoon.store", activeStore: "bbangsomoon.active-store", social: "bbangsomoon.social", hoursDefaultClosed: "bbangsomoon.hours-default-closed-v1" } as const;
 const wait = (ms = 420) => new Promise((resolve) => setTimeout(resolve, ms));
 const read = <T>(key: string, fallback: T): T => {
   if (typeof window === "undefined") return fallback;
@@ -51,6 +51,12 @@ const readContents = (): Content[] => {
   const contents = read<Array<Content | (Omit<Content, "status"> & { status: "generated" })>>(KEYS.contents, initialContents);
   const hasLegacyStatus = contents.some((content) => content.status === "generated");
   const normalized = contents.map((content) => content.status === "generated" ? { ...content, status: "draft" as const } : content);
+  if (typeof window !== "undefined" && !localStorage.getItem(KEYS.contentSeedCleanup)) {
+    const cleaned = normalized.filter((content) => content.id !== "4");
+    localStorage.setItem(KEYS.contentSeedCleanup, "true");
+    write(KEYS.contents, cleaned);
+    return cleaned;
+  }
   if (hasLegacyStatus) write(KEYS.contents, normalized);
   return normalized;
 };
@@ -88,8 +94,11 @@ export const mockApi = {
   async createContent(request: ContentGenerationRequest): Promise<Content> {
     await wait(1500); const all = readContents(); const id = String(Date.now());
     const title = request.prompt.split(/[.!?\n]/)[0]?.trim().slice(0, 36) || "새 매장 소식";
+    const generatedBody = request.prompt.trim()
+      ? `${request.prompt}\n\n매장의 분위기가 자연스럽게 전해지도록 홍보 문구를 만들었어요. 편하게 방문해 주세요.`
+      : "오늘의 매장 소식을 전해요. 사진 속 따뜻한 분위기를 직접 만나 보세요.";
     const content: Content = { id, title, breadName: "매장 소식", additionalRequest: request.prompt, tone: "friendly", purpose: "event", format: "feed",
-      body: `${request.prompt}\n\n매장의 분위기가 자연스럽게 전해지도록 홍보 문구를 만들었어요. 편하게 방문해 주세요.`,
+      body: generatedBody,
       hashtags: ["빵소문", "동네매장", "매장소식"], status: "draft",
       assets: request.media.map((asset,i) => ({ id: `asset-${id}-${i}`, type: asset.type, url: asset.url, alt: "홍보 콘텐츠 첨부 미디어" })), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
     };
@@ -98,7 +107,7 @@ export const mockApi = {
   async updateContent(id: string, patch: Partial<Content>): Promise<Content> { await wait(); const all = readContents(); const current = all.find((c) => c.id === id); if (!current) throw new Error("콘텐츠를 찾을 수 없어요."); const next = { ...current, ...patch, updatedAt: new Date().toISOString() }; write(KEYS.contents, all.map((c) => c.id === id ? next : c)); return next; },
   async deleteContent(id: string): Promise<void> { await wait(); write(KEYS.contents, readContents().filter((c) => c.id !== id)); },
   async regenerateContent(id: string): Promise<Content> { const item = await this.getContent(id); const request = item.additionalRequest || "매장의 새로운 소식을 알려 주세요."; const variations = [`${request}\n\n전하고 싶은 내용이 자연스럽게 닿을 수 있도록 준비했어요. 소문빵집에서 자세히 만나 보세요.`, `오늘 전해 드릴 매장 소식이 있어요.\n\n${request}\n\n궁금한 점은 편하게 문의해 주세요.`]; return this.updateContent(id, { body: variations[Math.floor(Math.random()*variations.length)] }); },
-  async publishContent(id: string, mode: "now" | "scheduled", scheduledAt?: string): Promise<Content> { await wait(700); return this.updateContent(id, mode === "now" ? { status: "published", publishedAt: new Date().toISOString(), scheduledAt: undefined, insight: { views: 0, likes: 0, saves: 0, comments: 0 } } : { status: "scheduled", scheduledAt, publishedAt: undefined }); },
+  async publishContent(id: string, mode: "now" | "scheduled", scheduledAt?: string): Promise<Content> { await wait(700); return this.updateContent(id, mode === "now" ? { status: "published", publishedAt: new Date().toISOString(), scheduledAt: undefined, failedAt: undefined, insight: { views: 0, likes: 0, saves: 0, comments: 0 } } : { status: "scheduled", scheduledAt, publishedAt: undefined, failedAt: undefined }); },
   async getStore(): Promise<Store> {
     await wait(250);
     const stores = readStores();

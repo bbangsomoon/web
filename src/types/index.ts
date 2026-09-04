@@ -9,7 +9,7 @@ export interface LoginRequest { email: string; password: string; }
 export interface SignupRequest { name: string; phone: string; email: string; password: string; }
 export interface FirstStoreRequest {
   name: string; postalCode: string; address: string; addressDetail: string; phone: string;
-  businessRegistrationNumber: string; representativeName: string; latitude: number; longitude: number;
+  businessRegistrationNumber: string; representativeName: string;
 }
 
 export interface Store {
@@ -35,7 +35,7 @@ export interface Content {
   id: string; title: string; breadName: string; price?: number; quantity?: string;
   highlights?: string; promotion?: string; additionalRequest?: string; body: string; hashtags: string[];
   tone: ContentTone; purpose: ContentPurpose; format: ContentFormat; status: ContentStatus; assets: ContentAsset[];
-  createdAt: string; updatedAt: string; scheduledAt?: string; publishedAt?: string; insight?: PostInsight;
+  createdAt: string; updatedAt: string; scheduledAt?: string; publishedAt?: string; failedAt?: string; insight?: PostInsight;
 }
 export interface ContentGenerationRequest {
   prompt: string;

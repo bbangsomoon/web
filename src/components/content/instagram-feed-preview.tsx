@@ -51,10 +51,10 @@ export function InstagramFeedPreview({ assets, body, hashtags, handle, likes = 0
         {assets.length > 1 && <div className="absolute left-1/2 flex -translate-x-1/2 gap-1">{assets.map((item, index) => <span key={item.id || item.url} className={cn("size-1.5 rounded-full", index === current ? "bg-sky-500" : "bg-stone-300")} />)}</div>}
         <Bookmark className="ml-auto size-6" aria-hidden="true" />
       </div>
-      <p className="mt-3 text-xs font-bold">좋아요 {likes.toLocaleString()}개</p>
-      <p className="mt-2 line-clamp-4 whitespace-pre-line text-xs leading-5"><b className="mr-1.5">{username}</b>{body}</p>
-      {hashtags.length > 0 && <p className="mt-1 line-clamp-2 text-xs leading-5 text-sky-900">{hashtags.map((tag) => `#${tag}`).join(" ")}</p>}
-      <p className="mt-2 text-[10px] text-stone-400">{timeLabel}</p>
+      <p className="mt-2 text-xs font-bold">좋아요 {likes.toLocaleString()}개</p>
+      <p className="mt-1 line-clamp-4 whitespace-pre-line text-xs leading-5"><b className="mr-1.5">{username}</b>{body}</p>
+      {hashtags.length > 0 && <p className="mt-0.5 line-clamp-2 text-xs leading-5 text-sky-900">{hashtags.map((tag) => `#${tag}`).join(" ")}</p>}
+      <p className="mt-1.5 text-[10px] text-stone-400">{timeLabel}</p>
     </div>
   </div>;
 }

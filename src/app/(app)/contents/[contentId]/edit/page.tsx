@@ -1,12 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarClock, Hash, LoaderCircle, Plus, RefreshCw, X, Zap } from "lucide-react";
+import { CalendarClock, Hash, Plus, X, Zap } from "lucide-react";
 import { Button, ErrorState, LoadingState, PageHeader } from "@/components/common/ui";
 import { InstagramIcon } from "@/components/common/brand-icons";
-import { ContentStepIndicator } from "@/components/content/content-step-indicator";
 import { InstagramFeedPreview } from "@/components/content/instagram-feed-preview";
 import { useToast } from "@/components/common/providers";
 import { mockApi } from "@/lib/api/mock-api";
@@ -30,6 +29,7 @@ function ContentEditor({ data }: { data: Content }) {
   const router = useRouter();
   const client = useQueryClient();
   const toast = useToast();
+  const publishActionsRef = useRef<HTMLDivElement>(null);
   const storedSchedule = data.scheduledAt ? new Date(data.scheduledAt) : null;
   const hasStoredSchedule = Boolean(storedSchedule && !Number.isNaN(storedSchedule.getTime()));
   const [body, setBody] = useState(data.body);
@@ -41,7 +41,7 @@ function ContentEditor({ data }: { data: Content }) {
   const social = useQuery({ queryKey: ["social"], queryFn: mockApi.getSocial });
 
   const saveDraft = useMutation({
-    mutationFn: () => mockApi.updateContent(id, { body, hashtags, status: "draft", scheduledAt: publishMode === "scheduled" ? new Date(`${date}T${time}`).toISOString() : undefined }),
+    mutationFn: () => mockApi.updateContent(id, { body, hashtags, status: "draft", scheduledAt: undefined }),
     onSuccess: (next) => {
       client.setQueryData(["content", id], next);
       client.invalidateQueries({ queryKey: ["contents"] });
@@ -52,7 +52,7 @@ function ContentEditor({ data }: { data: Content }) {
 
   const publish = useMutation({
     mutationFn: async () => {
-      await mockApi.updateContent(id, { body, hashtags, status: "draft" });
+      await mockApi.updateContent(id, { body, hashtags, status: "draft", scheduledAt: undefined });
       return mockApi.publishContent(id, publishMode, publishMode === "scheduled" ? new Date(`${date}T${time}`).toISOString() : undefined);
     },
     onSuccess: (next) => {
@@ -63,19 +63,19 @@ function ContentEditor({ data }: { data: Content }) {
     },
   });
 
-  const regenerate = useMutation({
-    mutationFn: () => mockApi.regenerateContent(id),
-    onSuccess: (next) => {
-      setBody(next.body);
-      client.setQueryData(["content", id], next);
-      toast("새로운 문장으로 다시 만들었어요.", "info");
-    },
-  });
-
   const addTag = () => {
     const next = tag.trim().replace(/^#/, "").replaceAll(" ", "");
     if (next && !hashtags.includes(next)) setHashtags((current) => [...current, next]);
     setTag("");
+  };
+
+  const selectPublishMode = (mode: "now" | "scheduled") => {
+    setPublishMode(mode);
+    if (mode === "scheduled") {
+      window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+        publishActionsRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }));
+    }
   };
 
   const isBusy = saveDraft.isPending || publish.isPending;
@@ -83,14 +83,12 @@ function ContentEditor({ data }: { data: Content }) {
   const publishDisabled = isBusy || scheduleIncomplete;
 
   return <div className="mx-auto max-w-4xl">
-    <PageHeader title="AI 콘텐츠 확인" backHref="/contents" />
-    <ContentStepIndicator step={2} />
-    <div className="grid gap-5 lg:grid-cols-[minmax(280px,.8fr)_1.2fr]">
-      <aside><div className="sticky top-6"><h2 className="mb-3 text-sm font-bold">Instagram 피드 미리보기</h2><InstagramFeedPreview assets={data.assets} body={body} hashtags={hashtags} handle={social.data?.handle ?? "@somoon_bakery"} /></div></aside>
+    <PageHeader className="mb-10" title="콘텐츠 수정하기" backHref={`/contents/${id}`} />
+    <div className="grid items-start gap-5 lg:grid-cols-[minmax(280px,.8fr)_1.2fr]">
+      <aside className="relative"><div className="sticky top-6"><h2 className="mb-3 text-sm font-bold lg:absolute lg:-top-6 lg:left-0 lg:mb-0">Instagram 피드 미리보기</h2><InstagramFeedPreview assets={data.assets} body={body} hashtags={hashtags} handle={social.data?.handle ?? "@somoon_bakery"} /></div></aside>
       <section className="surface rounded-[28px] p-5 sm:p-7">
         <div className="mb-4 flex items-center justify-between">
-          <div><span className="text-xs font-black text-[#ef6b32]">AI가 만든 초안</span><h2 className="mt-1 text-xl font-black">게시글 문구</h2></div>
-          <Button variant="secondary" onClick={() => regenerate.mutate()} disabled={regenerate.isPending || isBusy}>{regenerate.isPending ? <LoaderCircle className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}<span className="hidden sm:inline">다시 생성</span></Button>
+          <h2 className="text-xl font-black">게시글 문구</h2>
         </div>
         <textarea value={body} onChange={(event) => setBody(event.target.value)} rows={12} className="field resize-none leading-7" aria-label="게시글 문구" />
         <div className="mt-2 text-right text-xs font-semibold text-stone-400">{body.length}자</div>
@@ -104,13 +102,17 @@ function ContentEditor({ data }: { data: Content }) {
         <div className="mt-8 border-t border-stone-200 pt-7">
           <div className="flex items-start gap-3"><span className="grid size-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 text-white"><InstagramIcon className="size-5" /></span><div><h3 className="text-sm font-black">인스타그램 피드 게시</h3><p className="mt-1 text-xs text-stone-500">{social.data?.handle ?? "@somoon_bakery"}</p></div></div>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <button type="button" onClick={() => setPublishMode("now")} className={cn("focus-ring flex min-h-20 items-center gap-3 rounded-2xl border p-4 text-left", publishMode === "now" ? "border-[#ef6b32] bg-orange-50" : "border-stone-200 hover:border-stone-300")}><span className={cn("grid size-10 shrink-0 place-items-center rounded-xl", publishMode === "now" ? "bg-[#ef6b32] text-white" : "bg-stone-100 text-stone-500")}><Zap className="size-5" /></span><span><b className="block text-sm">지금 게시</b><small className="mt-1 block text-stone-500">바로 피드에 올려요</small></span></button>
-            <button type="button" onClick={() => setPublishMode("scheduled")} className={cn("focus-ring flex min-h-20 items-center gap-3 rounded-2xl border p-4 text-left", publishMode === "scheduled" ? "border-[#ef6b32] bg-orange-50" : "border-stone-200 hover:border-stone-300")}><span className={cn("grid size-10 shrink-0 place-items-center rounded-xl", publishMode === "scheduled" ? "bg-[#ef6b32] text-white" : "bg-stone-100 text-stone-500")}><CalendarClock className="size-5" /></span><span><b className="block text-sm">예약 게시</b><small className="mt-1 block text-stone-500">원하는 시간에 올려요</small></span></button>
+            <button type="button" onClick={() => selectPublishMode("now")} className={cn("focus-ring flex min-h-20 items-center gap-3 rounded-2xl border p-4 text-left", publishMode === "now" ? "border-[#ef6b32] bg-orange-50" : "border-stone-200 hover:border-stone-300")}><span className={cn("grid size-10 shrink-0 place-items-center rounded-xl", publishMode === "now" ? "bg-[#ef6b32] text-white" : "bg-stone-100 text-stone-500")}><Zap className="size-5" /></span><span><b className="block text-sm">지금 게시</b><small className="mt-1 block text-stone-500">바로 피드에 올려요</small></span></button>
+            <button type="button" onClick={() => selectPublishMode("scheduled")} className={cn("focus-ring flex min-h-20 items-center gap-3 rounded-2xl border p-4 text-left", publishMode === "scheduled" ? "border-[#ef6b32] bg-orange-50" : "border-stone-200 hover:border-stone-300")}><span className={cn("grid size-10 shrink-0 place-items-center rounded-xl", publishMode === "scheduled" ? "bg-[#ef6b32] text-white" : "bg-stone-100 text-stone-500")}><CalendarClock className="size-5" /></span><span><b className="block text-sm">예약 게시</b><small className="mt-1 block text-stone-500">원하는 시간에 올려요</small></span></button>
           </div>
           {publishMode === "scheduled" && <div className="mt-4 grid grid-cols-2 gap-3 rounded-2xl bg-stone-50 p-4"><label><span className="mb-2 block text-xs font-bold text-stone-500">날짜</span><input type="date" min={TODAY} value={date} onChange={(event) => setDate(event.target.value)} className="field" /></label><label><span className="mb-2 block text-xs font-bold text-stone-500">시간</span><input type="time" value={time} onChange={(event) => setTime(event.target.value)} className="field" /></label></div>}
         </div>
 
-        <div className="mt-8 grid gap-2 sm:grid-cols-2"><Button variant="secondary" onClick={() => saveDraft.mutate()} disabled={isBusy || scheduleIncomplete}>임시 저장</Button><Button onClick={() => publish.mutate()} disabled={publishDisabled}>게시하기</Button></div>
+        <div ref={publishActionsRef} className="mt-8 grid gap-2 sm:grid-cols-3">
+          <Button type="button" variant="secondary" onClick={() => router.push(`/contents/${id}`)} disabled={isBusy}>취소</Button>
+          <Button variant="secondary" onClick={() => saveDraft.mutate()} disabled={isBusy}>임시 저장</Button>
+          <Button onClick={() => publish.mutate()} disabled={publishDisabled}>게시하기</Button>
+        </div>
       </section>
     </div>
   </div>;
@@ -119,7 +121,7 @@ function ContentEditor({ data }: { data: Content }) {
 export default function EditContentPage() {
   const { contentId: id } = useParams<{ contentId: string }>();
   const { data, isLoading, isError } = useQuery({ queryKey: ["content", id], queryFn: () => mockApi.getContent(id) });
-  if (isLoading) return <LoadingState label="AI 글을 불러오고 있어요" />;
+  if (isLoading) return <LoadingState label="콘텐츠를 불러오고 있어요" />;
   if (isError || !data) return <ErrorState message="콘텐츠를 찾을 수 없어요." />;
-  return <ContentEditor data={data} />;
+  return <ContentEditor key={data.id} data={data} />;
 }
