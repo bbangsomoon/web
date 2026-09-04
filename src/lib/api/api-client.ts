@@ -1,8 +1,9 @@
-type ApiErrorBody = { code?: string; message?: string };
+export type ApiFieldError = { field: string; code: string; message: string };
+type ApiErrorBody = { code?: string; message?: string; errors?: ApiFieldError[] };
 type RequestOptions = RequestInit & { auth?: boolean; retryAfterReissue?: boolean };
 
 export class ApiError extends Error {
-  constructor(public status: number, public code: string, message: string) {
+  constructor(public status: number, public code: string, message: string, public errors: ApiFieldError[] = []) {
     super(message);
     this.name = "ApiError";
   }
@@ -16,7 +17,7 @@ export const getAccessToken = () => accessToken;
 
 const parseError = async (response: Response) => {
   const body = await response.json().catch(() => ({})) as ApiErrorBody;
-  return new ApiError(response.status, body.code ?? "UNKNOWN_ERROR", body.message ?? "요청을 처리하지 못했습니다.");
+  return new ApiError(response.status, body.code ?? "UNKNOWN_ERROR", body.message ?? "요청을 처리하지 못했습니다.", Array.isArray(body.errors) ? body.errors : []);
 };
 
 const reissue = async () => {

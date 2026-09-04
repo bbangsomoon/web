@@ -11,6 +11,8 @@ export type Member = {
 };
 export type Account = { email: string; name: string; lastLoginAt: string; createdAt: string };
 export type BusinessRegistrationAvailability = { available: boolean; status: "계속사업자" | "휴업자" | "폐업자" | "미등록"; reason?: "ALREADY_REGISTERED" | "NOT_ACTIVE" };
+export type StoreSummary = { id: string; name: string; address: string };
+export type ManagedStore = Store & { version: number };
 
 type StoreResponse = {
   storeId: number; name: string; phoneNumber: string; postalCode: string; address: string; addressDetail: string;
@@ -21,6 +23,15 @@ type StoreResponse = {
   amenities: string[]; blockedPhrases: string[];
 };
 type MenuResponse = { menuId: number; storeId: number; category?: string | null; name: string; price: number; description?: string | null; imageUrl?: string | null; soldOut: boolean };
+type StoreManagementResponse = {
+  storeId: number; version: number; name: string; description: string | null; phoneNumber: string;
+  postalCode: string; address: string; addressDetail: string | null;
+  representativeName: string; businessRegistrationNumber: string;
+  businessHours: Array<{ weekday: string; open: boolean; openTime?: string | null; closeTime?: string | null }>;
+  businessHoursNotice: string | null;
+  temporaryClosure: { startDate: string | null; endDate: string | null; reason: string | null } | null;
+  menus: MenuResponse[]; amenities: string[]; defaultTone?: "FRIENDLY" | "LIVELY" | "WITTY" | "PREMIUM"; blockedPhrases?: string[];
+};
 
 const weekdayMap = { MONDAY: "monday", TUESDAY: "tuesday", WEDNESDAY: "wednesday", THURSDAY: "thursday", FRIDAY: "friday", SATURDAY: "saturday", SUNDAY: "sunday" } as const;
 const amenityMap = { PARKING: "parking", TAKEOUT: "takeout", RESERVATION: "reservation", DELIVERY: "delivery", PET_FRIENDLY: "petFriendly", WIFI: "wifi" } as const;
@@ -58,10 +69,27 @@ const toStore = (store: StoreResponse, menus: MenuResponse[] = []): Store => ({
   amenities: store.amenities.map((item) => amenityMap[item as keyof typeof amenityMap]).filter(Boolean),
   menus: menus.map(toMenu), defaultTone: toneMap[store.defaultTone] ?? "friendly", blockedPhrases: store.blockedPhrases ?? [],
 });
-const toMenuPayload = (menu: StoreMenu) => ({ category: menu.category || null, name: menu.name, price: menu.price, description: menu.description || null, imageUrl: menu.imageUrl || null });
-const toBusinessHourPayload = (hours: StoreBusinessHour) => hours.open
-  ? { weekday: apiWeekdayMap[hours.day], open: true, openTime: `${hours.openTime}:00`, closeTime: `${hours.closeTime}:00` }
-  : { weekday: apiWeekdayMap[hours.day], open: false };
+const toManagedStore = (store: StoreManagementResponse): ManagedStore => ({
+  id: String(store.storeId), version: store.version, name: store.name, description: store.description ?? "", postalCode: store.postalCode,
+  address: store.address, addressDetail: store.addressDetail ?? "", phone: store.phoneNumber,
+  representativeName: store.representativeName, businessRegistrationNumber: store.businessRegistrationNumber,
+  weeklyHours: store.businessHours.map((hours) => ({
+    day: weekdayMap[hours.weekday as keyof typeof weekdayMap], open: hours.open,
+    openTime: hours.openTime?.slice(0, 5) ?? "09:00", closeTime: hours.closeTime?.slice(0, 5) ?? "18:00",
+  })).filter((hours) => Boolean(hours.day)),
+  businessHours: store.businessHoursNotice ?? "",
+  temporaryClosureStart: store.temporaryClosure?.startDate ?? "", temporaryClosureEnd: store.temporaryClosure?.endDate ?? "", temporaryClosureReason: store.temporaryClosure?.reason ?? "",
+  amenities: store.amenities.map((item) => amenityMap[item as keyof typeof amenityMap]).filter(Boolean),
+  menus: store.menus.map(toMenu), defaultTone: toneMap[store.defaultTone ?? "FRIENDLY"] ?? "friendly", blockedPhrases: store.blockedPhrases ?? [],
+});
+const toManagementMenuPayload = (menu: StoreMenu) => ({
+  menuId: /^\d+$/.test(menu.id) ? Number(menu.id) : null,
+  name: menu.name, price: menu.price, description: menu.description || "", imageUrl: menu.imageUrl || null,
+});
+const toManagementHourPayload = (hours: StoreBusinessHour) => ({
+  weekday: apiWeekdayMap[hours.day], open: hours.open,
+  openTime: hours.open ? hours.openTime : null, closeTime: hours.open ? hours.closeTime : null,
+});
 
 export const backendApi = {
   sendVerificationCode: (email: string) => apiFetch<void>("/auth/email/verification-code", { method: "POST", body: JSON.stringify({ email }), auth: false }),
@@ -107,39 +135,26 @@ export const backendApi = {
   },
   getBusinessRegistrationAvailability: (value: string) => apiFetch<BusinessRegistrationAvailability>(`/api/stores/business-registration-number/availability?value=${encodeURIComponent(value)}`),
   async getStores() {
-    const stores = await apiFetch<StoreResponse[]>("/api/stores/me");
-    return Promise.all(stores.map(async (store) => toStore(store, await apiFetch<MenuResponse[]>(`/api/stores/${store.storeId}/menus`))));
+    const stores = await apiFetch<MemberStoreSummary[]>("/api/stores/me");
+    return stores.map((store) => ({ id: String(store.storeId), name: store.name, address: store.address }));
   },
-  async getStore(id: string) {
-    const store = await apiFetch<StoreResponse>(`/api/stores/${id}`);
-    return toStore(store, await apiFetch<MenuResponse[]>(`/api/stores/${id}/menus`));
+  async getStore(id: string): Promise<ManagedStore> {
+    return toManagedStore(await apiFetch<StoreManagementResponse>(`/api/stores/${id}/management`));
   },
-  async updateStore(current: Store, next: Store) {
-    const storeId = next.id;
-    if (current.name !== next.name || current.phone !== next.phone || current.description !== next.description) await apiFetch(`/api/stores/${storeId}`, { method: "PATCH", body: JSON.stringify({ name: next.name, phoneNumber: next.phone, description: next.description }) });
-    if (current.postalCode !== next.postalCode || current.address !== next.address || current.addressDetail !== next.addressDetail) await apiFetch(`/api/stores/${storeId}/location`, { method: "PATCH", body: JSON.stringify({ postalCode: next.postalCode, address: next.address, addressDetail: next.addressDetail }) });
-    if (JSON.stringify(current.weeklyHours) !== JSON.stringify(next.weeklyHours) || current.businessHours !== next.businessHours) await apiFetch(`/api/stores/${storeId}/business-hours`, { method: "PUT", body: JSON.stringify({ businessHours: next.weeklyHours.map(toBusinessHourPayload), businessHoursNotice: next.businessHours || null }) });
-    if (JSON.stringify(current.amenities) !== JSON.stringify(next.amenities)) await apiFetch(`/api/stores/${storeId}/amenities`, { method: "PUT", body: JSON.stringify({ amenities: next.amenities.map((amenity) => apiAmenityMap[amenity]) }) });
-    const closureChanged = current.temporaryClosureStart !== next.temporaryClosureStart || current.temporaryClosureEnd !== next.temporaryClosureEnd || current.temporaryClosureReason !== next.temporaryClosureReason;
-    if (closureChanged && next.temporaryClosureStart && next.temporaryClosureEnd) {
-      await apiFetch(`/api/stores/${storeId}/temporary-closure`, { method: "PUT", body: JSON.stringify({ startDate: next.temporaryClosureStart, endDate: next.temporaryClosureEnd, reason: next.temporaryClosureReason || null }) });
-    } else if (closureChanged && (current.temporaryClosureStart || current.temporaryClosureEnd)) {
-      await apiFetch(`/api/stores/${storeId}/temporary-closure`, { method: "DELETE" });
-    }
-    const currentMenus = new Map(current.menus.map((menu) => [menu.id, menu]));
-    const nextMenus = new Map(next.menus.map((menu) => [menu.id, menu]));
-    await Promise.all(current.menus.filter((menu) => !nextMenus.has(menu.id)).map((menu) => apiFetch<void>(`/api/stores/${storeId}/menus/${menu.id}`, { method: "DELETE" })));
-    for (const menu of next.menus) {
-      const previous = currentMenus.get(menu.id);
-      if (!previous) {
-        const created = await apiFetch<MenuResponse>(`/api/stores/${storeId}/menus`, { method: "POST", body: JSON.stringify(toMenuPayload(menu)) });
-        if (menu.soldOut) await apiFetch(`/api/stores/${storeId}/menus/${created.menuId}/sold-out`, { method: "PATCH", body: JSON.stringify({ soldOut: true }) });
-      } else {
-        if (JSON.stringify(toMenuPayload(previous)) !== JSON.stringify(toMenuPayload(menu))) await apiFetch(`/api/stores/${storeId}/menus/${menu.id}`, { method: "PUT", body: JSON.stringify(toMenuPayload(menu)) });
-        if (previous.soldOut !== menu.soldOut) await apiFetch(`/api/stores/${storeId}/menus/${menu.id}/sold-out`, { method: "PATCH", body: JSON.stringify({ soldOut: menu.soldOut }) });
-      }
-    }
-    const store = await apiFetch<StoreResponse>(`/api/stores/${storeId}`);
-    return toStore(store, await apiFetch<MenuResponse[]>(`/api/stores/${storeId}/menus`));
+  async updateStore(next: ManagedStore) {
+    const response = await apiFetch<StoreManagementResponse>(`/api/stores/${next.id}/management`, {
+      method: "PUT",
+      body: JSON.stringify({
+        version: next.version, name: next.name, description: next.description || null, phoneNumber: next.phone,
+        postalCode: next.postalCode, address: next.address, addressDetail: next.addressDetail || null,
+        businessHours: next.weeklyHours.map(toManagementHourPayload), businessHoursNotice: next.businessHours || null,
+        temporaryClosure: {
+          startDate: next.temporaryClosureStart || null, endDate: next.temporaryClosureEnd || null, reason: next.temporaryClosureReason || null,
+        },
+        menus: next.menus.map(toManagementMenuPayload),
+        amenities: next.amenities.map((amenity) => apiAmenityMap[amenity]),
+      }),
+    });
+    return toManagedStore(response);
   },
 };

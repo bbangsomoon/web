@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Script from "next/script";
-import { useForm, useWatch } from "react-hook-form";
+import { useForm, useWatch, type FieldPath } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Check, ChevronRight, Clock3, Copy, Eye, Heart, Info, MapPin, Phone, Plus, Star, Store as StoreIcon, UtensilsCrossed } from "lucide-react";
@@ -10,6 +10,7 @@ import { z } from "zod";
 import { Button, ErrorState, LoadingState, PageHeader } from "@/components/common/ui";
 import { useToast } from "@/components/common/providers";
 import { MenuManagerDialog } from "@/components/settings/menu-manager-dialog";
+import { ApiError } from "@/lib/api/api-client";
 import { backendApi } from "@/lib/api/backend-api";
 import { cn } from "@/lib/utils";
 import type { Store, StoreAmenity, StoreBusinessHour, StoreWeekday } from "@/types";
@@ -82,6 +83,34 @@ const schema = z.object({
 
 type Values = z.infer<typeof schema>;
 type StoreTab = "basic" | "hours" | "menus" | "amenities";
+
+const apiFieldToFormPath = (field: string): FieldPath<Values> | null => {
+  const aliases: Record<string, FieldPath<Values>> = {
+    phoneNumber: "phone",
+    businessHours: "weeklyHours",
+    temporaryClosure: "temporaryClosureStart",
+    "temporaryClosure.startDate": "temporaryClosureStart",
+    "temporaryClosure.endDate": "temporaryClosureEnd",
+    "temporaryClosure.reason": "temporaryClosureReason",
+  };
+  if (aliases[field]) return aliases[field];
+  if (/^(name|description|postalCode|address|addressDetail|businessHours|amenities|menus)$/.test(field)) return field as FieldPath<Values>;
+  const weeklyHours = field.match(/^businessHours\[(\d+)\]\.(openTime|closeTime)$/);
+  if (weeklyHours) return `weeklyHours.${weeklyHours[1]}.${weeklyHours[2]}` as FieldPath<Values>;
+  const menu = field.match(/^menus\[(\d+)\]\.(menuId|name|price|description|imageUrl)$/);
+  if (menu && menu[2] !== "menuId") return `menus.${menu[1]}.${menu[2]}` as FieldPath<Values>;
+  return null;
+};
+
+const apiFieldTargetId = (field: string) => {
+  if (["name", "description", "phoneNumber"].includes(field)) return field === "name" ? "store-field-name" : field === "description" ? "store-field-description" : "store-field-phone";
+  if (["postalCode", "address", "addressDetail"].includes(field)) return field === "addressDetail" ? "store-field-address-detail" : "store-field-address";
+  if (field === "businessHours" || field.startsWith("businessHours[")) return "store-field-weekly-hours";
+  if (field === "temporaryClosure" || field.startsWith("temporaryClosure.")) return "store-field-temporary-closure";
+  if (field.startsWith("menus[")) return "store-section-menus";
+  if (field === "amenities") return "store-section-amenities";
+  return null;
+};
 
 const storeTabs: Array<{ value: StoreTab; label: string }> = [
   { value: "basic", label: "기본 정보" },
@@ -160,6 +189,8 @@ export default function StoreSettingsPage() {
     reset,
     control,
     setValue,
+    setError,
+    clearErrors,
     handleSubmit,
     formState: { dirtyFields, errors, isDirty },
   } = useForm<Values>({ resolver: zodResolver(schema), defaultValues });
@@ -201,12 +232,24 @@ export default function StoreSettingsPage() {
   }, [changedFields]);
 
   const save = useMutation({
-    mutationFn: (nextValues: Values) => backendApi.updateStore(query.data!, { ...query.data!, ...nextValues }),
+    mutationFn: (nextValues: Values) => backendApi.updateStore({ ...query.data!, ...nextValues }),
     onSuccess: (next) => {
       client.setQueryData(["store", next.id], next);
       client.invalidateQueries({ queryKey: ["stores"] });
       reset(toFormValues(next));
       toast("매장 정보를 저장했어요.");
+    },
+    onError: (error) => {
+      const apiError = error instanceof ApiError ? error : null;
+      const fieldErrors = apiError?.errors ?? [];
+      fieldErrors.forEach((item) => {
+        const path = apiFieldToFormPath(item.field);
+        if (path) setError(path, { type: item.code, message: item.message });
+      });
+      const first = fieldErrors[0];
+      const targetId = first ? apiFieldTargetId(first.field) : null;
+      if (targetId) document.getElementById(targetId)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      toast(first?.message ?? apiError?.message ?? "매장 정보를 저장하지 못했어요.", "error");
     },
   });
 
@@ -262,7 +305,7 @@ export default function StoreSettingsPage() {
       <form
         noValidate
         onSubmit={handleSubmit(
-          (nextValues) => save.mutate(nextValues),
+          (nextValues) => { clearErrors(); save.mutate(nextValues); },
           (formErrors) => {
             if (formErrors.name || formErrors.address || formErrors.phone || formErrors.representativeName || formErrors.businessRegistrationNumber) {
               toast("기본 정보의 필수 항목을 확인해 주세요.", "error");
