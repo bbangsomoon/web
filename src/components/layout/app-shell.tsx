@@ -3,11 +3,11 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { type MouseEvent, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AtSign, BarChart3, ChevronDown, ChevronRight, Home, LayoutGrid, Store, UserRound } from "lucide-react";
+import { AtSign, BarChart3, CheckCircle2, ChevronDown, ChevronRight, CircleAlert, Home, LayoutGrid, LoaderCircle, Store, UserRound } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LegalFooter } from "@/components/common/legal-footer";
-import { useToast } from "@/components/common/providers";
+import { useContentGeneration, useToast } from "@/components/common/providers";
 import { backendApi } from "@/lib/api/backend-api";
 
 type NavItem = { href: string; label: string; icon: LucideIcon; special?: boolean; disabled?: boolean };
@@ -28,6 +28,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const toast = useToast();
+  const { generationJob, clearGeneration } = useContentGeneration();
   const [activeStoreId, setActiveStoreId] = useState("");
   const [unsavedStoreChanges, setUnsavedStoreChanges] = useState<UnsavedStoreChanges>({ isDirty: false, sections: [] });
   const stores = useQuery({ queryKey: ["stores"], queryFn: backendApi.getStores });
@@ -80,6 +81,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     switchStore.mutate(storeId);
   };
   return <div className="min-h-screen">
+    {!pathname.startsWith("/contents/new") && generationJob?.status === "generating" && <div role="status" aria-live="polite" className="fixed right-4 top-[calc(env(safe-area-inset-top)+1rem)] z-[60] inline-flex min-h-11 items-center gap-2 rounded-xl border border-orange-200 bg-[#fffaf5] px-4 text-sm font-bold text-[#b9471f] shadow-[0_10px_28px_rgba(92,70,53,.16)] sm:right-6 lg:right-8"><LoaderCircle className="size-4 animate-spin" />AI 콘텐츠 생성 중</div>}
+    {!pathname.startsWith("/contents/new") && generationJob?.status === "completed" && generationJob.contentId && <Link href={`/contents/${generationJob.contentId}/edit?flow=generate`} onClick={clearGeneration} className="focus-ring fixed right-4 top-[calc(env(safe-area-inset-top)+1rem)] z-[60] inline-flex min-h-11 items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 text-sm font-bold text-emerald-800 shadow-[0_10px_28px_rgba(92,70,53,.16)] sm:right-6 lg:right-8"><CheckCircle2 className="size-4" />콘텐츠 생성 완료<ChevronRight className="size-4" /></Link>}
+    {!pathname.startsWith("/contents/new") && generationJob?.status === "failed" && generationJob.contentId && <Link href={`/contents/${generationJob.contentId}`} onClick={clearGeneration} className="focus-ring fixed right-4 top-[calc(env(safe-area-inset-top)+1rem)] z-[60] inline-flex min-h-11 items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 text-sm font-bold text-red-700 shadow-[0_10px_28px_rgba(92,70,53,.16)] sm:right-6 lg:right-8"><CircleAlert className="size-4" />콘텐츠 생성 실패<ChevronRight className="size-4" /></Link>}
     <aside className="fixed inset-y-0 left-0 z-40 hidden w-[264px] overflow-y-auto border-r border-stone-200 bg-[#26231f] p-6 text-white lg:flex lg:flex-col">
       <Link href="/dashboard" className="focus-ring block w-full shrink-0 rounded-xl py-1.5 text-center text-[22px] font-semibold tracking-[-.05em] text-white">빵소문</Link>
       <div className="relative mt-5 shrink-0">

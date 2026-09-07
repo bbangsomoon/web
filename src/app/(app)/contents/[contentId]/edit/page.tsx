@@ -1,11 +1,12 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { Suspense, useRef, useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarClock, Hash, Plus, X, Zap } from "lucide-react";
-import { Button, ErrorState, LoadingState, PageHeader } from "@/components/common/ui";
+import { Button, ErrorState, LoadingState, PageHeader, ServiceNotice } from "@/components/common/ui";
 import { InstagramIcon } from "@/components/common/brand-icons";
+import { ContentStepIndicator } from "@/components/content/content-step-indicator";
 import { InstagramFeedPreview } from "@/components/content/instagram-feed-preview";
 import { useToast } from "@/components/common/providers";
 import { useSelectedStore } from "@/lib/active-store";
@@ -28,6 +29,7 @@ const toTimeInputValue = (date: Date) => `${String(date.getHours()).padStart(2, 
 function ContentEditor({ data, storeId }: { data: Content; storeId: string }) {
   const id = data.id;
   const router = useRouter();
+  const searchParams = useSearchParams();
   const client = useQueryClient();
   const toast = useToast();
   const publishActionsRef = useRef<HTMLDivElement>(null);
@@ -40,6 +42,7 @@ function ContentEditor({ data, storeId }: { data: Content; storeId: string }) {
   const [date, setDate] = useState(hasStoredSchedule ? toDateInputValue(storedSchedule!) : DEFAULT_DATE);
   const [time, setTime] = useState(hasStoredSchedule ? toTimeInputValue(storedSchedule!) : "11:00");
   const social = useQuery({ queryKey: ["social", storeId], queryFn: () => contentApi.getInstagramAccount(storeId) });
+  const isGenerationReview = searchParams.get("flow") === "generate";
 
   const saveDraft = useMutation({
     mutationFn: () => contentApi.updateContent(storeId, id, { caption: body, hashtags }),
@@ -47,7 +50,7 @@ function ContentEditor({ data, storeId }: { data: Content; storeId: string }) {
       client.setQueryData(["content", storeId, id], next);
       client.invalidateQueries({ queryKey: ["contents", storeId] });
       toast("수정 사항을 저장했어요.");
-      router.push("/contents");
+      router.push(`/contents/${id}`);
     },
   });
 
@@ -86,7 +89,8 @@ function ContentEditor({ data, storeId }: { data: Content; storeId: string }) {
   const publishDisabled = isBusy || scheduleIncomplete || totalCharacterCount > 2200;
 
   return <div className="mx-auto max-w-4xl">
-    <PageHeader className="mb-10" title="콘텐츠 수정하기" backHref={`/contents/${id}`} />
+    <PageHeader className={isGenerationReview ? "mb-7" : "mb-10"} title={isGenerationReview ? "AI 콘텐츠 확인" : "콘텐츠 수정하기"} backHref={`/contents/${id}`} />
+    {isGenerationReview && <ContentStepIndicator step={2} />}
     <div className="grid items-start gap-5 lg:grid-cols-[minmax(280px,.8fr)_1.2fr]">
       <aside className="relative"><div className="sticky top-6"><h2 className="mb-3 text-sm font-bold lg:absolute lg:-top-6 lg:left-0 lg:mb-0">Instagram 피드 미리보기</h2><InstagramFeedPreview assets={data.assets} body={body} hashtags={hashtags} handle={social.data?.username ? `@${social.data.username}` : "@instagram"} /></div></aside>
       <section className="surface rounded-[28px] p-5 sm:p-7">
@@ -124,8 +128,10 @@ function ContentEditor({ data, storeId }: { data: Content; storeId: string }) {
 export default function EditContentPage() {
   const { contentId: id } = useParams<{ contentId: string }>();
   const { storeId, stores } = useSelectedStore();
-  const { data, isLoading, isError } = useQuery({ queryKey: ["content", storeId, id], queryFn: () => contentApi.getContent(storeId, id), enabled: Boolean(storeId) });
-  if (stores.isLoading || isLoading) return <LoadingState label="콘텐츠를 불러오고 있어요" />;
-  if (stores.isError || isError || !data || !storeId) return <ErrorState message="콘텐츠를 찾을 수 없어요." />;
-  return <ContentEditor key={data.id} data={data} storeId={storeId} />;
+  const { data, isLoading, isError, refetch } = useQuery({ queryKey: ["content", storeId, id], queryFn: () => contentApi.getContent(storeId, id), enabled: Boolean(storeId), retry: 2, refetchInterval: (contentQuery) => contentQuery.state.status === "error" ? 10_000 : false });
+  if (stores.isLoading || !storeId || (isLoading && !data)) return <LoadingState label="콘텐츠를 불러오고 있어요" />;
+  if (stores.isError) return <ErrorState message="콘텐츠를 불러오지 못했어요." />;
+  if (!data) return <div className="mx-auto max-w-4xl"><PageHeader className="mb-10" title="콘텐츠 수정하기" backHref={`/contents/${id}`} /><ServiceNotice onRetry={() => void refetch()} /></div>;
+  if (isError) return <><ServiceNotice onRetry={() => void refetch()} /><Suspense fallback={<LoadingState label="콘텐츠를 불러오고 있어요" />}><ContentEditor key={data.id} data={data} storeId={storeId} /></Suspense></>;
+  return <Suspense fallback={<LoadingState label="콘텐츠를 불러오고 있어요" />}><ContentEditor key={data.id} data={data} storeId={storeId} /></Suspense>;
 }

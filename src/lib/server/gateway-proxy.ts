@@ -25,5 +25,6 @@ export async function proxyGatewayRequest(request: NextRequest, path: string[]) 
   responseHeaders.delete("content-encoding"); responseHeaders.delete("content-length"); responseHeaders.delete("transfer-encoding");
   const setCookies = (upstream.headers as Headers & { getSetCookie?: () => string[] }).getSetCookie?.();
   if (setCookies?.length) { responseHeaders.delete("set-cookie"); setCookies.forEach((cookie) => responseHeaders.append("set-cookie", cookie)); }
-  return new Response(await upstream.arrayBuffer(), { status: upstream.status, headers: responseHeaders });
+  const responseBody = [204, 205, 304].includes(upstream.status) ? null : await upstream.arrayBuffer();
+  return new Response(responseBody, { status: upstream.status, headers: responseHeaders });
 }

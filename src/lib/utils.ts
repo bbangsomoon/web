@@ -8,6 +8,7 @@ export const formatDate = (value: string, withTime = false) => new Intl.DateTime
 export const todayKorean = () => new Intl.DateTimeFormat("ko-KR", { month: "long", day: "numeric", weekday: "long" }).format(new Date());
 
 export const statusMeta: Record<ContentStatus, { label: string; className: string }> = {
+  generating: { label: "생성 중", className: "bg-violet-50 text-violet-700" },
   draft: { label: "임시 저장", className: "bg-stone-100 text-stone-600" },
   scheduled: { label: "예약됨", className: "bg-blue-50 text-blue-700" },
   publishing: { label: "게시 중", className: "bg-amber-50 text-amber-700" },

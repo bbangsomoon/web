@@ -1,4 +1,4 @@
-export type ContentStatus = "draft" | "scheduled" | "publishing" | "published" | "failed";
+export type ContentStatus = "generating" | "draft" | "scheduled" | "publishing" | "published" | "failed";
 export type ContentTone = "friendly" | "lively" | "witty" | "premium";
 export type ContentPurpose = "new_product" | "today_bread" | "promotion" | "event";
 export type ContentFormat = "feed" | "reel";
