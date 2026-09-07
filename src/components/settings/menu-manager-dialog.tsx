@@ -9,8 +9,12 @@ import type { StoreMenu } from "@/types";
 
 type MenuDraft = Omit<StoreMenu, "id" | "price"> & { price: string };
 
+const MAX_MENU_DESCRIPTION_LENGTH = 100;
+const MIN_MENU_PRICE = 100;
+const MAX_MENU_PRICE = 1_000_000;
+
 const emptyDraft: MenuDraft = {
-  category: "빵",
+  category: "",
   name: "",
   price: "",
   description: "",
@@ -77,13 +81,17 @@ function MenuManagerDialogContent({
       setError("메뉴 이름을 입력해 주세요.");
       return;
     }
-    if (!Number.isFinite(price) || price < 0) {
-      setError("가격을 숫자로 입력해 주세요.");
+    if (!Number.isInteger(price) || price < MIN_MENU_PRICE || price > MAX_MENU_PRICE) {
+      setError("가격은 100원부터 1,000,000원까지 입력할 수 있어요.");
+      return;
+    }
+    if (draft.description.trim().length > MAX_MENU_DESCRIPTION_LENGTH) {
+      setError(`메뉴 설명은 ${MAX_MENU_DESCRIPTION_LENGTH}자까지 입력할 수 있어요.`);
       return;
     }
     const next: StoreMenu = {
       id: editingId ?? `menu-${Date.now()}`,
-      category: draft.category.trim() || "기타",
+      category: draft.category.trim(),
       name: draft.name.trim(),
       price,
       description: draft.description.trim(),
@@ -122,7 +130,7 @@ function MenuManagerDialogContent({
         <header className="flex items-center justify-between border-b border-stone-200 bg-white px-5 py-4 sm:px-7">
           <div>
             <h2 id="menu-manager-title" className="text-xl font-black">메뉴 관리</h2>
-            <p className="mt-1 text-sm text-stone-500">메뉴를 여러 개 등록하고 품절 상태까지 관리할 수 있어요.</p>
+            <p className="mt-1 text-sm text-stone-500">메뉴를 여러 개 등록하고 수정할 수 있어요.</p>
           </div>
           <button type="button" onClick={onClose} aria-label="메뉴 관리 닫기" className="focus-ring grid size-10 shrink-0 place-items-center rounded-full text-stone-500 hover:bg-stone-100 hover:text-stone-900">
             <X className="size-5" />
@@ -144,8 +152,8 @@ function MenuManagerDialogContent({
                       <Image src={menu.imageUrl || "/images/bakery-hero.png"} alt={`${menu.name} 메뉴 사진`} fill sizes="64px" unoptimized={menu.imageUrl.startsWith("data:")} className="object-cover" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2"><span className="truncate text-sm font-black">{menu.name}</span>{menu.soldOut && <span className="shrink-0 rounded-full bg-stone-200 px-2 py-0.5 text-[11px] font-bold text-stone-600">품절</span>}</div>
-                      <p className="mt-1 truncate text-xs text-stone-500">{menu.category} · {menu.price.toLocaleString("ko-KR")}원</p>
+                      <span className="block truncate text-sm font-black">{menu.name}</span>
+                      <p className="mt-1 truncate text-xs text-stone-500">{menu.price.toLocaleString("ko-KR")}원</p>
                     </div>
                     <div className="flex shrink-0 gap-1">
                       <button type="button" onClick={() => startEdit(menu)} aria-label={`${menu.name} 수정`} className="focus-ring grid size-9 place-items-center rounded-lg text-stone-500 hover:bg-orange-50 hover:text-[#d95320]"><Pencil className="size-4" /></button>
@@ -172,11 +180,9 @@ function MenuManagerDialogContent({
                   </button>
                 </div>
               </div>
-              <label><span className="mb-2 block text-sm font-bold">카테고리</span><input value={draft.category} onChange={(event) => setDraft((current) => ({ ...current, category: event.target.value }))} className="field" placeholder="예: 식사빵" /></label>
               <label><span className="mb-2 block text-sm font-bold">메뉴 이름 <b className="text-[#ef6b32]">*</b></span><input value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} className="field" placeholder="예: 소금빵" /></label>
-              <label><span className="mb-2 block text-sm font-bold">가격 <b className="text-[#ef6b32]">*</b></span><div className="relative"><input value={draft.price} onChange={(event) => setDraft((current) => ({ ...current, price: event.target.value.replace(/[^0-9,]/g, "") }))} inputMode="numeric" className="field pr-11" placeholder="3000" /><span className="absolute right-4 top-3.5 text-sm text-stone-400">원</span></div></label>
-              <label className="flex items-end"><span className="flex min-h-12 w-full items-center justify-between rounded-2xl border border-stone-200 bg-white px-4 text-sm font-bold"><span>현재 품절</span><input type="checkbox" checked={draft.soldOut} onChange={(event) => setDraft((current) => ({ ...current, soldOut: event.target.checked }))} className="size-5 accent-[#ef6b32]" /></span></label>
-              <label className="sm:col-span-2 lg:col-span-1 xl:col-span-2"><span className="mb-2 block text-sm font-bold">메뉴 설명</span><textarea value={draft.description} onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))} rows={3} className="field resize-none" placeholder="맛과 재료를 간단히 알려주세요." /></label>
+              <label><span className="mb-2 block text-sm font-bold">가격 <b className="text-[#ef6b32]">*</b></span><div className="relative"><input value={draft.price} onChange={(event) => setDraft((current) => ({ ...current, price: event.target.value.replace(/\D/g, "").slice(0, 7) }))} inputMode="numeric" maxLength={7} className="field pr-11" placeholder="3000" /><span className="absolute right-4 top-3.5 text-sm text-stone-400">원</span></div><span className="mt-1.5 block text-xs text-stone-500">100원~1,000,000원</span></label>
+              <label className="sm:col-span-2 lg:col-span-1 xl:col-span-2"><span className="mb-2 flex items-center justify-between text-sm font-bold"><span>메뉴 설명</span><span className="text-xs font-medium text-stone-400">{draft.description.length}/{MAX_MENU_DESCRIPTION_LENGTH}</span></span><textarea value={draft.description} onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value.slice(0, MAX_MENU_DESCRIPTION_LENGTH) }))} maxLength={MAX_MENU_DESCRIPTION_LENGTH} rows={3} className="field resize-none" placeholder="맛과 재료를 간단히 알려주세요." /></label>
             </div>
             {error && <p className="mt-3 text-sm font-semibold text-red-600">{error}</p>}
             <Button type="button" onClick={saveMenu} className="mt-5 w-full">{editingId ? "메뉴 수정 완료" : "메뉴 추가"}</Button>

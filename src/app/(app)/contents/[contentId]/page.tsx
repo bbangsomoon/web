@@ -1,28 +1,116 @@
 "use client";
-import Link from "next/link";
-import { useState } from "react";
+
+import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AtSign, CalendarClock, Clapperboard, Eye, Heart, MessageCircle, Pencil, Save, Send, Trash2 } from "lucide-react";
+import { CalendarClock, ExternalLink, Eye, Heart, LoaderCircle, MessageCircle, Pencil, Save, Send, Trash2 } from "lucide-react";
 import { Badge, Button, ConfirmDialog, ErrorState, LoadingState, PageHeader } from "@/components/common/ui";
-import { MediaPreview } from "@/components/content/media-preview";
+import { InstagramFeedPreview } from "@/components/content/instagram-feed-preview";
 import { useToast } from "@/components/common/providers";
-import { mockApi } from "@/lib/api/mock-api";
+import { useSelectedStore } from "@/lib/active-store";
+import { contentApi } from "@/lib/api/content-api";
 import { formatDate } from "@/lib/utils";
 
-export default function ContentDetailPage(){
-  const {contentId:id}=useParams<{contentId:string}>(); const router=useRouter(); const client=useQueryClient(); const toast=useToast(); const [confirm,setConfirm]=useState<"delete"|"cancel"|null>(null);
-  const {data,isLoading,isError}=useQuery({queryKey:["content",id],queryFn:()=>mockApi.getContent(id)});
-  const remove=useMutation({mutationFn:()=>mockApi.deleteContent(id),onSuccess:()=>{client.invalidateQueries({queryKey:["contents"]});toast("콘텐츠를 삭제했어요.");router.replace("/contents")}});
-  const cancel=useMutation({mutationFn:()=>mockApi.updateContent(id,{status:"generated",scheduledAt:undefined}),onSuccess:(next)=>{client.setQueryData(["content",id],next);client.invalidateQueries({queryKey:["contents"]});setConfirm(null);toast("예약을 취소했어요.", "info")}});
-  if(isLoading)return <LoadingState/>; if(isError||!data)return <ErrorState message="콘텐츠를 찾을 수 없어요."/>;
-  const time=data.scheduledAt||data.publishedAt||data.createdAt;
-  return <div className="mx-auto max-w-5xl"><PageHeader title={data.title} description={`마지막 수정 ${formatDate(data.updatedAt,true)}`} backHref="/contents" action={<Badge status={data.status}/>}/><div className="grid gap-5 lg:grid-cols-[minmax(320px,.9fr)_1.1fr]">
-    <div><div className="surface overflow-hidden rounded-[28px]"><div className={`relative bg-stone-100 ${data.format==="reel"?"aspect-[9/16] max-h-[720px]":"aspect-square"}`}><MediaPreview asset={data.assets[0]} sizes="520px" controls={data.format==="reel"}/>{data.format==="reel"&&<span className="absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-black/65 px-3 py-1.5 text-xs font-semibold text-white"><Clapperboard className="size-3.5"/>릴스</span>}</div><div className="flex items-center gap-3 border-t border-stone-100 p-4 text-sm"><AtSign className="size-5 text-pink-600"/><div><b className="block">@somoon_bakery</b><span className="text-xs text-stone-400">Instagram · {data.format==="reel"?"Reels":"Feed"}</span></div></div></div>
-      {data.status==="published"&&data.insight&&<div className="mt-5 grid grid-cols-4 gap-2">{[{icon:Eye,label:"조회",value:data.insight.views},{icon:Heart,label:"좋아요",value:data.insight.likes},{icon:Save,label:"저장",value:data.insight.saves},{icon:MessageCircle,label:"댓글",value:data.insight.comments}].map(({icon:Icon,label,value})=><div key={label} className="surface rounded-2xl p-3 text-center"><Icon className="mx-auto size-4 text-[#ef6b32]"/><strong className="mt-2 block text-lg">{value.toLocaleString()}</strong><span className="text-[11px] text-stone-400">{label}</span></div>)}</div>}
+export default function ContentDetailPage() {
+  const { contentId: id } = useParams<{ contentId: string }>();
+  const router = useRouter();
+  const client = useQueryClient();
+  const toast = useToast();
+  const { storeId, stores } = useSelectedStore();
+  const [confirm, setConfirm] = useState<"delete" | "cancel" | null>(null);
+  const content = useQuery({ queryKey: ["content", storeId, id], queryFn: () => contentApi.getContent(storeId, id), enabled: Boolean(storeId), refetchInterval: (query) => query.state.data?.status === "publishing" ? 3_000 : false });
+  const social = useQuery({ queryKey: ["social", storeId], queryFn: () => contentApi.getInstagramAccount(storeId), enabled: Boolean(storeId) });
+  const contentData = content.data;
+
+  useEffect(() => {
+    if (contentData && contentData.status !== "publishing") client.invalidateQueries({ queryKey: ["contents", storeId] });
+  }, [client, contentData, storeId]);
+
+  const remove = useMutation({
+    mutationFn: () => contentApi.deleteContent(storeId, id),
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: ["contents", storeId] });
+      toast("콘텐츠를 삭제했어요.");
+      router.replace("/contents");
+    },
+  });
+
+  const cancel = useMutation({
+    mutationFn: () => contentApi.cancelSchedule(storeId, id),
+    onSuccess: (next) => {
+      client.setQueryData(["content", storeId, id], next);
+      client.invalidateQueries({ queryKey: ["contents", storeId] });
+      setConfirm(null);
+      toast("예약을 취소했어요.", "info");
+    },
+  });
+
+  const publishNow = useMutation({
+    mutationFn: () => contentApi.publish(storeId, id, null),
+    onSuccess: (next) => {
+      client.setQueryData(["content", storeId, id], next);
+      client.invalidateQueries({ queryKey: ["contents", storeId] });
+      toast("Instagram 피드 게시를 시작했어요.", "info");
+    },
+  });
+
+  if (stores.isLoading || content.isLoading) return <LoadingState />;
+  if (stores.isError || content.isError || !content.data || !storeId) return <ErrorState message="콘텐츠를 찾을 수 없어요." />;
+
+  const data = content.data;
+  const displayTime = data.status === "scheduled"
+    ? data.scheduledAt || data.updatedAt
+    : data.status === "published"
+      ? data.publishedAt || data.updatedAt
+      : data.status === "failed"
+        ? data.failedAt || data.updatedAt
+        : data.updatedAt;
+  const timeLabel = data.status === "scheduled" ? "예약 시간" : data.status === "publishing" ? "게시 시작" : data.status === "published" ? "게시 시간" : data.status === "failed" ? "실패 시간" : "작성 시간";
+  const previewTimeLabel = data.status === "published" ? formatDate(displayTime) : data.status === "scheduled" ? "예약 게시 예정" : data.status === "publishing" ? "게시 중" : data.status === "failed" ? "게시 실패" : "아직 게시되지 않음";
+
+  return <div className="mx-auto max-w-5xl">
+    <PageHeader className="mb-10" title="콘텐츠 상세" backHref="/contents" />
+    <div className="grid items-start gap-6 lg:grid-cols-[minmax(320px,.9fr)_1.1fr]">
+      <section className="relative">
+        <h2 className="mb-3 text-sm font-bold lg:absolute lg:-top-6 lg:left-0 lg:mb-0">Instagram 피드 미리보기</h2>
+        <InstagramFeedPreview assets={data.assets} body={data.body} hashtags={data.hashtags} handle={social.data?.username ? `@${social.data.username}` : "@instagram"} likes={data.insight?.likes} timeLabel={previewTimeLabel} />
+      </section>
+
+      <section className="surface rounded-[28px] p-5 sm:p-8">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-lg font-black text-stone-900">게시 정보</h2>
+          <Badge status={data.status} className="shrink-0 px-3 py-1.5 text-sm" />
+        </div>
+        <div className="mt-6 flex items-center gap-2 rounded-2xl bg-stone-50 px-4 py-3 text-sm font-bold text-stone-500"><CalendarClock className="size-4 text-[#ef6b32]" />{timeLabel}<span className="ml-auto text-stone-700">{formatDate(displayTime, true)}</span></div>
+
+        <div className="mt-7"><h3 className="text-sm font-black">게시글 문구</h3><p className="mt-3 whitespace-pre-line text-sm leading-7 text-stone-700">{data.body}</p></div>
+        {data.hashtags.length > 0 && <div className="mt-6 flex flex-wrap gap-x-2 gap-y-1">{data.hashtags.map((tag) => <span key={tag} className="text-sm font-bold text-orange-600">#{tag}</span>)}</div>}
+        {data.status === "failed" && <div className="mt-6 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm leading-6 text-red-700">{data.failureReason || "게시하지 못했어요. 내용을 확인한 뒤 다시 시도해 주세요."}</div>}
+
+        {data.status === "published" && data.insight && <div className="mt-8 border-t border-stone-100 pt-7"><h3 className="text-sm font-black">게시 성과</h3><div className="mt-3 grid grid-cols-4 gap-2">{[
+          { icon: Eye, label: "조회", value: data.insight.views },
+          { icon: Heart, label: "좋아요", value: data.insight.likes },
+          { icon: Save, label: "저장", value: data.insight.saves },
+          { icon: MessageCircle, label: "댓글", value: data.insight.comments },
+        ].map(({ icon: Icon, label, value }) => <div key={label} className="rounded-2xl bg-stone-50 p-3 text-center"><Icon className="mx-auto size-4 text-[#ef6b32]" /><strong className="mt-2 block text-base">{value.toLocaleString()}</strong><span className="text-[10px] text-stone-400">{label}</span></div>)}</div></div>}
+
+        <div className="mt-8">
+          {data.status === "published" && <div className="grid gap-2">{data.permalink ? <a href={data.permalink} target="_blank" rel="noreferrer" className="focus-ring inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm font-bold text-stone-800 hover:bg-stone-50"><ExternalLink className="size-4" />Instagram에서 보기</a> : <p className="rounded-2xl bg-stone-50 px-4 py-3 text-center text-sm font-semibold text-stone-500">게시된 콘텐츠는 Instagram 앱에서 관리할 수 있어요.</p>}</div>}
+          {data.status === "publishing" && <div className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-amber-50 px-4 py-3 text-sm font-bold text-amber-700"><LoaderCircle className="size-4 animate-spin" />Instagram에 게시하고 있어요.</div>}
+          {data.status === "scheduled" && <div className="grid gap-2 sm:grid-cols-2"><Button variant="secondary" onClick={() => setConfirm("cancel")}><CalendarClock className="size-4" />예약 취소</Button><Button variant="secondary" onClick={() => router.push(`/contents/${id}/edit`)}><Pencil className="size-4" />수정하기</Button></div>}
+          {data.status === "failed" && <div className="grid gap-2 sm:grid-cols-3"><Button variant="danger" onClick={() => setConfirm("delete")}><Trash2 className="size-4" />삭제하기</Button><Button variant="secondary" onClick={() => router.push(`/contents/${id}/edit`)}><Pencil className="size-4" />수정하기</Button><Button onClick={() => publishNow.mutate()} disabled={publishNow.isPending}><Send className="size-4" />게시하기</Button></div>}
+          {data.status === "draft" && <div className="grid gap-2 sm:grid-cols-2"><Button variant="danger" onClick={() => setConfirm("delete")}><Trash2 className="size-4" />삭제하기</Button><Button variant="secondary" onClick={() => router.push(`/contents/${id}/edit`)}><Pencil className="size-4" />이어서 작성하기</Button></div>}
+        </div>
+      </section>
     </div>
-    <article className="surface rounded-[28px] p-5 sm:p-8"><div className="flex items-center gap-2 text-sm font-bold text-stone-500"><CalendarClock className="size-4 text-[#ef6b32]"/>{data.status==="scheduled"?"예약 시간":data.status==="published"?"게시 시간":"작성 시간"}<span className="ml-auto text-stone-700">{formatDate(time,true)}</span></div><hr className="my-6 border-stone-100"/><p className="whitespace-pre-line text-[15px] leading-8 text-stone-700">{data.body}</p><div className="mt-6 flex flex-wrap gap-2">{data.hashtags.map(tag=><span key={tag} className="text-sm font-bold text-orange-600">#{tag}</span>)}</div>
-      <div className="mt-8 grid gap-2 sm:grid-cols-2"><Link href={`/contents/${id}/edit`} className="focus-ring inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-stone-200 bg-white px-4 text-sm font-bold hover:bg-stone-50"><Pencil className="size-4"/>수정하기</Link>{["draft","generated","failed"].includes(data.status)&&<Link href={`/contents/${id}/publish`} className="focus-ring inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#ef6b32] px-4 text-sm font-bold text-white"><Send className="size-4"/>게시 설정</Link>}{data.status==="scheduled"&&<Button variant="secondary" onClick={()=>setConfirm("cancel")}><CalendarClock className="size-4"/>예약 취소</Button>}</div><button onClick={()=>setConfirm("delete")} className="focus-ring mx-auto mt-5 flex items-center gap-1 rounded-lg p-2 text-xs font-bold text-stone-400 hover:text-red-600"><Trash2 className="size-4"/>이 콘텐츠 삭제</button>
-    </article>
-  </div><ConfirmDialog open={confirm!==null} title={confirm==="delete"?"콘텐츠를 삭제할까요?":"예약 게시를 취소할까요?"} description={confirm==="delete"?"삭제한 콘텐츠는 되돌릴 수 없어요.":"콘텐츠는 삭제되지 않고 ‘생성 완료’ 상태로 돌아갑니다."} confirmLabel={confirm==="delete"?"삭제하기":"예약 취소"} onClose={()=>setConfirm(null)} onConfirm={()=>confirm==="delete"?remove.mutate():cancel.mutate()}/></div>;
+
+    <ConfirmDialog
+      open={confirm !== null}
+      title={confirm === "delete" ? "콘텐츠를 삭제할까요?" : "예약 게시를 취소할까요?"}
+      description={confirm === "delete" ? "삭제한 콘텐츠는 되돌릴 수 없어요." : "콘텐츠는 삭제되지 않고 ‘임시 저장’ 상태로 돌아갑니다."}
+      confirmLabel={confirm === "delete" ? "삭제하기" : "예약 취소"}
+      onClose={() => setConfirm(null)}
+      onConfirm={() => confirm === "delete" ? remove.mutate() : cancel.mutate()}
+    />
+  </div>;
 }
