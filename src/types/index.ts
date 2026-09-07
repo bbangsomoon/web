@@ -1,4 +1,4 @@
-export type ContentStatus = "draft" | "scheduled" | "published" | "failed";
+export type ContentStatus = "draft" | "scheduled" | "publishing" | "published" | "failed";
 export type ContentTone = "friendly" | "lively" | "witty" | "premium";
 export type ContentPurpose = "new_product" | "today_bread" | "promotion" | "event";
 export type ContentFormat = "feed" | "reel";
@@ -35,7 +35,8 @@ export interface Content {
   id: string; title: string; breadName: string; price?: number; quantity?: string;
   highlights?: string; promotion?: string; additionalRequest?: string; body: string; hashtags: string[];
   tone: ContentTone; purpose: ContentPurpose; format: ContentFormat; status: ContentStatus; assets: ContentAsset[];
-  createdAt: string; updatedAt: string; scheduledAt?: string; publishedAt?: string; failedAt?: string; insight?: PostInsight;
+  createdAt: string; updatedAt: string; scheduledAt?: string; publishedAt?: string; failedAt?: string;
+  permalink?: string; failureCode?: string; failureReason?: string; insight?: PostInsight;
 }
 export interface ContentGenerationRequest {
   prompt: string;

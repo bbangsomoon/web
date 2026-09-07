@@ -9,7 +9,18 @@ export async function proxyGatewayRequest(request: NextRequest, path: string[]) 
   headers.delete("connection");
   headers.delete("content-length");
   const body = request.method === "GET" || request.method === "HEAD" ? undefined : await request.arrayBuffer();
-  const upstream = await fetch(`${gatewayOrigin}/${path.join("/")}${request.nextUrl.search}`, { method: request.method, headers, body, cache: "no-store", redirect: "manual" });
+  const upstreamUrl = new URL(`${path.join("/")}${request.nextUrl.search}`, `${gatewayOrigin}/`);
+  let upstream = await fetch(upstreamUrl, { method: request.method, headers, body, cache: "no-store", redirect: "manual" });
+
+  // Keep a same-origin API redirect inside the server proxy. Letting it reach the
+  // browser could move an authenticated local request to the API origin directly.
+  const location = upstream.headers.get("location");
+  if (location && [301, 302, 307, 308].includes(upstream.status)) {
+    const redirectUrl = new URL(location, upstreamUrl);
+    if (redirectUrl.origin === upstreamUrl.origin) {
+      upstream = await fetch(redirectUrl, { method: request.method, headers, body, cache: "no-store", redirect: "manual" });
+    }
+  }
   const responseHeaders = new Headers(upstream.headers);
   responseHeaders.delete("content-encoding"); responseHeaders.delete("content-length"); responseHeaders.delete("transfer-encoding");
   const setCookies = (upstream.headers as Headers & { getSetCookie?: () => string[] }).getSetCookie?.();

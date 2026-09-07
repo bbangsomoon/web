@@ -47,7 +47,10 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
   if (init.body && !requestHeaders.has("Content-Type")) requestHeaders.set("Content-Type", "application/json");
   if (auth && token) requestHeaders.set("Authorization", `Bearer ${token}`);
 
-  const response = await fetch(path, { ...init, headers: requestHeaders, credentials: "include" });
+  // API responses contain per-user data and must not reuse a previously cached
+  // redirect or response. In particular, an old permanent redirect must never
+  // move an authenticated local request to the production API origin.
+  const response = await fetch(path, { ...init, headers: requestHeaders, credentials: "include", cache: "no-store" });
   if (!response.ok) {
     const error = await parseError(response);
     if (auth && retryAfterReissue && response.status === 401 && error.code === "EXPIRED_TOKEN") {

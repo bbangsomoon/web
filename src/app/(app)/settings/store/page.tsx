@@ -281,8 +281,12 @@ export default function StoreSettingsPage() {
     }
     new window.kakao.Postcode({
       oncomplete: (data) => {
+        if (!data.roadAddress) {
+          toast("도로명 주소를 선택해 주세요.", "error");
+          return;
+        }
         setValue("postalCode", data.zonecode, { shouldDirty: true });
-        setValue("address", data.roadAddress || data.jibunAddress || data.address, { shouldDirty: true, shouldValidate: true });
+        setValue("address", data.roadAddress, { shouldDirty: true, shouldValidate: true });
         toast("주소를 선택했어요.", "info");
       },
     }).open({ popupTitle: "빵소문 주소 검색" });

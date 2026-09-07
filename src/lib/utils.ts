@@ -10,6 +10,7 @@ export const todayKorean = () => new Intl.DateTimeFormat("ko-KR", { month: "long
 export const statusMeta: Record<ContentStatus, { label: string; className: string }> = {
   draft: { label: "임시 저장", className: "bg-stone-100 text-stone-600" },
   scheduled: { label: "예약됨", className: "bg-blue-50 text-blue-700" },
+  publishing: { label: "게시 중", className: "bg-amber-50 text-amber-700" },
   published: { label: "게시 완료", className: "bg-emerald-50 text-emerald-700" },
   failed: { label: "게시 실패", className: "bg-red-50 text-red-700" },
 };
