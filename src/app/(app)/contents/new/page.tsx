@@ -9,7 +9,7 @@ import { ImagePlus, Trash2 } from "lucide-react";
 import { Button, PageHeader } from "@/components/common/ui";
 import { ContentStepIndicator } from "@/components/content/content-step-indicator";
 import { MediaPreview } from "@/components/content/media-preview";
-import { useToast } from "@/components/common/providers";
+import { useContentGeneration, useToast } from "@/components/common/providers";
 import { contentFormSchema, type ContentFormValues } from "@/features/content/schemas";
 import { useSelectedStore } from "@/lib/active-store";
 import { contentApi, type ContentMedia } from "@/lib/api/content-api";
@@ -57,6 +57,7 @@ export default function NewContentPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const toast = useToast();
+  const { generationJob, startGeneration, trackGeneration, completeGeneration, clearGeneration } = useContentGeneration();
   const { storeId, stores } = useSelectedStore();
   const [previews, setPreviews] = useState<UploadedMedia[]>([]);
   const [mediaError, setMediaError] = useState("");
@@ -77,8 +78,14 @@ export default function NewContentPage() {
   useEffect(() => {
     localStorage.setItem("bbangsomoon.new-draft", JSON.stringify(values));
   }, [values]);
+  useEffect(() => {
+    if (generationJob?.status !== "completed" || generationJob.storeId !== storeId || !generationJob.contentId) return;
+    clearGeneration();
+    router.replace(`/contents/${generationJob.contentId}/edit?flow=generate`);
+  }, [clearGeneration, generationJob, router, storeId]);
 
   const mutation = useMutation({
+    onMutate: startGeneration,
     mutationFn: async () => {
       const request = generationRef.current ?? { key: crypto.randomUUID() };
       generationRef.current = request;
@@ -89,9 +96,15 @@ export default function NewContentPage() {
       generationRef.current = null;
       localStorage.removeItem("bbangsomoon.new-draft");
       queryClient.invalidateQueries({ queryKey: ["contents", storeId] });
+      if (content.status === "generating") {
+        trackGeneration(storeId, content.id);
+        toast("AI 콘텐츠 생성을 시작했어요.", "info");
+        return;
+      }
       toast("AI 콘텐츠가 완성됐어요!");
-      router.push(`/contents/${content.id}/edit`);
+      completeGeneration(storeId, content.id);
     },
+    onError: clearGeneration,
   });
 
   const addFiles = async (files: FileList | null) => {
@@ -161,6 +174,10 @@ export default function NewContentPage() {
           {canAddMedia && <button type="button" onClick={() => inputRef.current?.click()} className="focus-ring grid aspect-square place-items-center rounded-2xl border-2 border-dashed border-stone-200 text-stone-500 hover:border-orange-200 hover:text-[#ef6b32]"><span className="flex flex-col items-center gap-2 text-xs font-bold"><ImagePlus className="size-6" />사진 추가</span></button>}
         </div>}
         {mediaError && <p className="mt-3 text-sm font-semibold text-red-600">{mediaError}</p>}
+        <label className="mt-4 flex cursor-not-allowed items-center gap-3 rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm opacity-70">
+          <input type="checkbox" disabled className="size-4 rounded border-stone-300" />
+          <span><b className="font-bold text-stone-700">썸네일도 함께 만들기</b><span className="ml-2 rounded-md bg-stone-200 px-1.5 py-0.5 text-[10px] font-black text-stone-500">준비 중</span><span className="mt-0.5 block text-xs text-stone-500">콘텐츠 서버 연동 후 대표 이미지를 함께 제작할 수 있어요.</span></span>
+        </label>
 
         <label className="mt-7 block border-t border-stone-200 pt-7">
           <span className="mb-2 block text-sm font-bold">AI에게 부탁할 내용 <span className="font-medium text-stone-400">(선택)</span></span>
@@ -171,7 +188,7 @@ export default function NewContentPage() {
     </div>
 
     <div className="sticky bottom-[76px] z-20 -mx-4 mt-5 flex border-t border-stone-200 bg-[#fbfaf6]/95 px-4 py-4 backdrop-blur lg:bottom-0 lg:mx-0 lg:border-0 lg:bg-transparent lg:px-0">
-      <Button className="min-h-13 flex-1" onClick={generate} disabled={!canContinue || mutation.isPending}>{mutation.isPending ? "사진을 올리고 AI가 콘텐츠를 만들고 있어요" : "AI 콘텐츠 만들기"}</Button>
+      <Button className="min-h-13 flex-1" onClick={generate} disabled={!canContinue || mutation.isPending || generationJob?.status === "generating"}>{mutation.isPending || generationJob?.status === "generating" ? "AI 콘텐츠 생성 중" : "AI 콘텐츠 만들기"}</Button>
     </div>
   </div>;
 }

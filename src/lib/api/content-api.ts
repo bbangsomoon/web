@@ -1,16 +1,16 @@
 import { apiFetch } from "@/lib/api/api-client";
 import type { Content, ContentAsset, ContentStatus } from "@/types";
 
-type ApiContentStatus = "DRAFT" | "SCHEDULED" | "PUBLISHING" | "PUBLISHED" | "FAILED";
+type ApiContentStatus = "GENERATING" | "DRAFT" | "SCHEDULED" | "PUBLISHING" | "PUBLISHED" | "FAILED";
 export type ContentMedia = { type: "IMAGE"; url: string };
 type ApiContent = {
   contentId: number;
   storeId: number;
   status: ApiContentStatus;
-  caption: string;
-  hashtags: string[];
+  caption: string | null;
+  hashtags: string[] | null;
   userPrompt: string | null;
-  media: ContentMedia[];
+  media: ContentMedia[] | null;
   scheduledAt: string | null;
   publishedAt: string | null;
   failedAt: string | null;
@@ -34,15 +34,15 @@ export type InstagramAccount = {
 };
 
 const statusFromApi: Record<ApiContentStatus, ContentStatus> = {
-  DRAFT: "draft", SCHEDULED: "scheduled", PUBLISHING: "publishing", PUBLISHED: "published", FAILED: "failed",
+  GENERATING: "generating", DRAFT: "draft", SCHEDULED: "scheduled", PUBLISHING: "publishing", PUBLISHED: "published", FAILED: "failed",
 };
 const statusToApi: Record<ContentStatus, ApiContentStatus> = {
-  draft: "DRAFT", scheduled: "SCHEDULED", publishing: "PUBLISHING", published: "PUBLISHED", failed: "FAILED",
+  generating: "GENERATING", draft: "DRAFT", scheduled: "SCHEDULED", publishing: "PUBLISHING", published: "PUBLISHED", failed: "FAILED",
 };
 
 const toContent = (content: ApiContent): Content => {
   const createdAt = content.createdAt ?? content.updatedAt ?? content.publishedAt ?? content.scheduledAt ?? content.failedAt ?? new Date().toISOString();
-  const assets: ContentAsset[] = content.media.map((media, index) => ({
+  const assets: ContentAsset[] = (content.media ?? []).map((media, index) => ({
     id: `${content.contentId}-${index}`,
     type: "image",
     url: media.url,
@@ -50,11 +50,11 @@ const toContent = (content: ApiContent): Content => {
   }));
   return {
     id: String(content.contentId),
-    title: content.caption.split(/\n|[.!?]/)[0]?.trim().slice(0, 36) || "새 콘텐츠",
+    title: content.caption?.split(/\n|[.!?]/)[0]?.trim().slice(0, 36) || (content.status === "GENERATING" ? "AI 콘텐츠 생성 중" : "새 콘텐츠"),
     breadName: "",
     additionalRequest: content.userPrompt ?? "",
-    body: content.caption,
-    hashtags: content.hashtags,
+    body: content.caption ?? "",
+    hashtags: content.hashtags ?? [],
     tone: "friendly",
     purpose: "event",
     format: "feed",

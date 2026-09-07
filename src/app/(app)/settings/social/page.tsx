@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, ExternalLink, LoaderCircle, ShieldCheck, Unlink } from "lucide-react";
-import { Button, ConfirmDialog, ErrorState, LoadingState, PageHeader } from "@/components/common/ui";
+import { Button, ConfirmDialog, ErrorState, LoadingState, PageHeader, ServiceNotice } from "@/components/common/ui";
 import { InstagramIcon } from "@/components/common/brand-icons";
 import { useToast } from "@/components/common/providers";
 import { useSelectedStore } from "@/lib/active-store";
@@ -18,7 +18,7 @@ function SocialSettingsContent() {
   const toast = useToast();
   const { storeId, stores } = useSelectedStore();
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
-  const { data, isLoading, isError } = useQuery({ queryKey: ["social", storeId], queryFn: () => contentApi.getInstagramAccount(storeId), enabled: Boolean(storeId) });
+  const { data, isLoading, isError, refetch } = useQuery({ queryKey: ["social", storeId], queryFn: () => contentApi.getInstagramAccount(storeId), enabled: Boolean(storeId), retry: 2, refetchInterval: (socialQuery) => socialQuery.state.status === "error" ? 10_000 : false });
 
   useEffect(() => {
     const status = searchParams.get("status");
@@ -45,11 +45,13 @@ function SocialSettingsContent() {
     },
   });
 
-  if (stores.isLoading || isLoading) return <LoadingState />;
-  if (stores.isError || isError || !data || !storeId) return <ErrorState />;
+  if (stores.isLoading || !storeId || (isLoading && !data)) return <LoadingState />;
+  if (stores.isError) return <ErrorState />;
+  if (!data) return <div className="mx-auto max-w-3xl"><PageHeader title="SNS 관리" /><ServiceNotice onRetry={() => void refetch()} /></div>;
 
   return <div className="mx-auto max-w-3xl">
     <PageHeader title="SNS 관리" />
+    {isError && <ServiceNotice onRetry={() => void refetch()} className="mb-5" />}
     <div>
       <section className="surface overflow-hidden rounded-[28px]">
         <div className="flex items-center gap-3 bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 px-6 py-5 text-white"><InstagramIcon className="size-8" /><h2 className="text-xl font-black">Instagram</h2></div>

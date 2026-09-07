@@ -230,6 +230,25 @@ export default function StoreSettingsPage() {
     window.addEventListener("bbangsomoon:store-settings-focus-first-dirty", scrollToFirstChangedField);
     return () => window.removeEventListener("bbangsomoon:store-settings-focus-first-dirty", scrollToFirstChangedField);
   }, [changedFields]);
+  useEffect(() => {
+    const updateActiveTabFromScroll = () => {
+      const scrollAnchor = 140;
+      let nextTab = storeTabs[0].value;
+      for (const tab of storeTabs) {
+        const section = document.getElementById(`store-section-${tab.value}`);
+        if (section && section.getBoundingClientRect().top <= scrollAnchor) nextTab = tab.value;
+      }
+      setActiveTab((current) => current === nextTab ? current : nextTab);
+    };
+
+    updateActiveTabFromScroll();
+    window.addEventListener("scroll", updateActiveTabFromScroll, { passive: true });
+    window.addEventListener("resize", updateActiveTabFromScroll);
+    return () => {
+      window.removeEventListener("scroll", updateActiveTabFromScroll);
+      window.removeEventListener("resize", updateActiveTabFromScroll);
+    };
+  }, [selectedStoreId, query.data]);
 
   const save = useMutation({
     mutationFn: (nextValues: Values) => backendApi.updateStore({ ...query.data!, ...nextValues }),
