@@ -13,12 +13,12 @@ const ToastContext = createContext<ShowToast>(() => undefined);
 export const useToast = () => useContext(ToastContext);
 
 const GENERATION_JOB_STORAGE_KEY = "bbangsomoon.content-generation-job";
-type ContentGenerationJob = { status: "generating" | "completed" | "failed"; contentId?: string; storeId?: string };
+type ContentGenerationJob = { status: "generating" | "completed" | "failed"; contentId?: string; storeId?: string; thumbnailRequested?: boolean };
 type ContentGenerationContextValue = {
   generationJob: ContentGenerationJob | null;
-  startGeneration: () => void;
-  trackGeneration: (storeId: string, contentId: string) => void;
-  completeGeneration: (storeId: string, contentId: string) => void;
+  startGeneration: (thumbnailRequested?: boolean) => void;
+  trackGeneration: (storeId: string, contentId: string, thumbnailRequested?: boolean) => void;
+  completeGeneration: (storeId: string, contentId: string, thumbnailRequested?: boolean) => void;
   clearGeneration: () => void;
 };
 const ContentGenerationContext = createContext<ContentGenerationContextValue>({
@@ -72,6 +72,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
           status: content.status === "draft" ? "completed" : "failed",
           contentId: generationJob.contentId,
           storeId: generationJob.storeId,
+          thumbnailRequested: generationJob.thumbnailRequested,
         });
       } catch {
         // Content deployment can briefly interrupt polling; the next interval retries.
@@ -83,7 +84,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   }, [generationJob?.contentId, generationJob?.status, generationJob?.storeId]);
   const meta = toast ? toastMeta[toast.variant] : null;
   const ToastIcon = meta?.icon;
-  return <QueryClientProvider client={queryClient}><ToastContext.Provider value={showToast}><ContentGenerationContext.Provider value={{ generationJob, startGeneration: () => setGenerationJob({ status: "generating" }), trackGeneration: (storeId, contentId) => setGenerationJob({ status: "generating", storeId, contentId }), completeGeneration: (storeId, contentId) => setGenerationJob({ status: "completed", storeId, contentId }), clearGeneration: () => setGenerationJob(null) }}>{children}
+  return <QueryClientProvider client={queryClient}><ToastContext.Provider value={showToast}><ContentGenerationContext.Provider value={{ generationJob, startGeneration: (thumbnailRequested = false) => setGenerationJob({ status: "generating", thumbnailRequested }), trackGeneration: (storeId, contentId, thumbnailRequested = false) => setGenerationJob({ status: "generating", storeId, contentId, thumbnailRequested }), completeGeneration: (storeId, contentId, thumbnailRequested = false) => setGenerationJob({ status: "completed", storeId, contentId, thumbnailRequested }), clearGeneration: () => setGenerationJob(null) }}>{children}
     {toast && meta && ToastIcon && (
       <div className="pointer-events-none fixed inset-x-0 top-[calc(env(safe-area-inset-top)+1rem)] z-[100] flex justify-center px-4">
         <div key={toast.id} role={toast.variant === "error" ? "alert" : "status"} aria-live={toast.variant === "error" ? "assertive" : "polite"} className={cn("toast-in pointer-events-auto flex w-fit max-w-full items-center gap-3 rounded-2xl border px-4 py-3.5 text-sm font-semibold text-stone-800 shadow-[0_14px_38px_rgba(41,37,32,.16)]", meta.surfaceClass)}><ToastIcon className={cn("size-5 shrink-0", meta.iconClass)} /><span className="min-w-0 leading-5">{toast.message}</span></div>

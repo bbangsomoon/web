@@ -99,6 +99,7 @@ export const contentApi = {
   async uploadImages(files: File[]) {
     const response = await apiFetch<UploadKeyResponse>("/api/contents/upload-keys", {
       method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey() },
       body: JSON.stringify({ count: files.length }),
     });
     if (response.uploads.length !== files.length) throw new Error("사진 업로드 주소를 모두 받지 못했어요. 다시 시도해 주세요.");

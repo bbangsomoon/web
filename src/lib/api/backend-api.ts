@@ -10,6 +10,7 @@ export type Member = {
   marketingAgreed: boolean; createdAt: string; stores: MemberStoreSummary[];
 };
 export type Account = { email: string; name: string; lastLoginAt: string; createdAt: string };
+type InquiryResponse = { inquiryId: number; email: string; title: string; createdAt: string };
 export type BusinessRegistrationAvailability = { available: boolean; status: "계속사업자" | "휴업자" | "폐업자" | "미등록"; reason?: "ALREADY_REGISTERED" | "NOT_ACTIVE" };
 export type StoreSummary = { id: string; name: string; address: string };
 export type ManagedStore = Store & { version: number };
@@ -126,6 +127,7 @@ export const backendApi = {
     await apiFetch<void>("/auth/me", { method: "DELETE" });
     setAccessToken(null); forgetEmail();
   },
+  submitInquiry: (request: { email: string; title: string; content: string }) => apiFetch<InquiryResponse>("/api/inquiries", { method: "POST", body: JSON.stringify(request) }),
   async createFirstStore(request: FirstStoreRequest) {
     const response = await apiFetch<StoreResponse>("/api/stores", { method: "POST", body: JSON.stringify({
       name: request.name, phoneNumber: request.phone, postalCode: request.postalCode, address: request.address,
