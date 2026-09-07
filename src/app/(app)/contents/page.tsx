@@ -10,7 +10,7 @@ import { contentApi } from "@/lib/api/content-api";
 import { cn, statusMeta } from "@/lib/utils";
 import type { ContentStatus } from "@/types";
 
-const filters: Array<{value:"all"|ContentStatus;label:string}>=[{value:"all",label:"전체"},...Object.entries(statusMeta).map(([value,meta])=>({value:value as ContentStatus,label:meta.label}))];
+const filters: Array<{value:"all"|ContentStatus;label:string}>=[{value:"all",label:"전체"},...Object.entries(statusMeta).filter(([value]) => value !== "generating" && value !== "publishing").map(([value,meta])=>({value:value as ContentStatus,label:meta.label}))];
 export default function ContentsPage(){
   const { storeId, stores } = useSelectedStore();
   const [filter,setFilter]=useState<"all"|ContentStatus>("all"); const [query,setQuery]=useState("");

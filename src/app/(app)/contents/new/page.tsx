@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ImagePlus, Trash2 } from "lucide-react";
+import { ImagePlus, LoaderCircle, Trash2 } from "lucide-react";
 import { Button, PageHeader } from "@/components/common/ui";
 import { ContentStepIndicator } from "@/components/content/content-step-indicator";
 import { MediaPreview } from "@/components/content/media-preview";
@@ -13,6 +13,7 @@ import { useContentGeneration, useToast } from "@/components/common/providers";
 import { contentFormSchema, type ContentFormValues } from "@/features/content/schemas";
 import { useSelectedStore } from "@/lib/active-store";
 import { contentApi, type ContentMedia } from "@/lib/api/content-api";
+import { markThumbnailRequested } from "@/lib/content-thumbnail";
 import type { ContentAsset } from "@/types";
 
 const MAX_IMAGE_COUNT = 5;
@@ -61,6 +62,7 @@ export default function NewContentPage() {
   const { storeId, stores } = useSelectedStore();
   const [previews, setPreviews] = useState<UploadedMedia[]>([]);
   const [mediaError, setMediaError] = useState("");
+  const [thumbnailRequested, setThumbnailRequested] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const generationRef = useRef<{ key: string; media?: ContentMedia[] } | null>(null);
   const { register, control, trigger, reset, formState: { errors } } = useForm<ContentFormValues>({ resolver: zodResolver(contentFormSchema), defaultValues });
@@ -81,11 +83,11 @@ export default function NewContentPage() {
   useEffect(() => {
     if (generationJob?.status !== "completed" || generationJob.storeId !== storeId || !generationJob.contentId) return;
     clearGeneration();
-    router.replace(`/contents/${generationJob.contentId}/edit?flow=generate`);
+    router.replace(`/contents/${generationJob.contentId}/edit?flow=generate${generationJob.thumbnailRequested ? "&thumbnail=1" : ""}`);
   }, [clearGeneration, generationJob, router, storeId]);
 
   const mutation = useMutation({
-    onMutate: startGeneration,
+    onMutate: () => startGeneration(thumbnailRequested),
     mutationFn: async () => {
       const request = generationRef.current ?? { key: crypto.randomUUID() };
       generationRef.current = request;
@@ -95,17 +97,19 @@ export default function NewContentPage() {
     onSuccess: (content) => {
       generationRef.current = null;
       localStorage.removeItem("bbangsomoon.new-draft");
+      if (thumbnailRequested) markThumbnailRequested(content.id);
       queryClient.invalidateQueries({ queryKey: ["contents", storeId] });
       if (content.status === "generating") {
-        trackGeneration(storeId, content.id);
+        trackGeneration(storeId, content.id, thumbnailRequested);
         toast("AI 콘텐츠 생성을 시작했어요.", "info");
         return;
       }
       toast("AI 콘텐츠가 완성됐어요!");
-      completeGeneration(storeId, content.id);
+      completeGeneration(storeId, content.id, thumbnailRequested);
     },
     onError: clearGeneration,
   });
+  const isGenerating = mutation.isPending || generationJob?.status === "generating";
 
   const addFiles = async (files: FileList | null) => {
     if (!files) return;
@@ -174,21 +178,22 @@ export default function NewContentPage() {
           {canAddMedia && <button type="button" onClick={() => inputRef.current?.click()} className="focus-ring grid aspect-square place-items-center rounded-2xl border-2 border-dashed border-stone-200 text-stone-500 hover:border-orange-200 hover:text-[#ef6b32]"><span className="flex flex-col items-center gap-2 text-xs font-bold"><ImagePlus className="size-6" />사진 추가</span></button>}
         </div>}
         {mediaError && <p className="mt-3 text-sm font-semibold text-red-600">{mediaError}</p>}
-        <label className="mt-4 flex cursor-not-allowed items-center gap-3 rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm opacity-70">
-          <input type="checkbox" disabled className="size-4 rounded border-stone-300" />
-          <span><b className="font-bold text-stone-700">썸네일도 함께 만들기</b><span className="ml-2 rounded-md bg-stone-200 px-1.5 py-0.5 text-[10px] font-black text-stone-500">준비 중</span><span className="mt-0.5 block text-xs text-stone-500">콘텐츠 서버 연동 후 대표 이미지를 함께 제작할 수 있어요.</span></span>
+        <label className="mt-4 flex cursor-pointer items-center gap-3 rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm transition hover:border-orange-200">
+          <input type="checkbox" checked={thumbnailRequested} onChange={(event) => setThumbnailRequested(event.target.checked)} className="size-4 rounded border-stone-300" />
+          <span><b className="font-bold text-stone-700">AI 썸네일도 함께 만들기</b><span className="mt-0.5 block text-xs text-stone-500">다음 단계에서 썸네일에 넣을 문구를 입력할 수 있어요.</span></span>
         </label>
 
-        <label className="mt-7 block border-t border-stone-200 pt-7">
-          <span className="mb-2 block text-sm font-bold">AI에게 부탁할 내용 <span className="font-medium text-stone-400">(선택)</span></span>
+        <label className="mt-7 block">
+          <span className="mb-2 block text-sm font-bold">AI에게 부탁할 내용</span>
           <textarea {...register("prompt")} rows={7} className="field resize-none leading-6" placeholder="예: 오늘 비가 와서 오후 6시부터 남은 빵을 20% 할인한다고 따뜻한 말투로 알려줘." />
           {errors.prompt && <span className="mt-2 block text-xs font-semibold text-red-600">{errors.prompt.message}</span>}
         </label>
+        {isGenerating && <div role="status" aria-live="polite" className="mt-5 flex items-center justify-center gap-2 rounded-xl bg-orange-50 px-4 py-3 text-sm font-semibold text-[#b9471f]">AI가 콘텐츠를 만들고 있어요.<LoaderCircle className="size-4 animate-spin" /></div>}
       </section>
     </div>
 
     <div className="sticky bottom-[76px] z-20 -mx-4 mt-5 flex border-t border-stone-200 bg-[#fbfaf6]/95 px-4 py-4 backdrop-blur lg:bottom-0 lg:mx-0 lg:border-0 lg:bg-transparent lg:px-0">
-      <Button className="min-h-13 flex-1" onClick={generate} disabled={!canContinue || mutation.isPending || generationJob?.status === "generating"}>{mutation.isPending || generationJob?.status === "generating" ? "AI 콘텐츠 생성 중" : "AI 콘텐츠 만들기"}</Button>
+      <Button className="min-h-13 flex-1" onClick={generate} disabled={!canContinue || isGenerating}>{isGenerating ? <>AI 콘텐츠 생성 중<LoaderCircle className="size-4 animate-spin" /></> : "AI 콘텐츠 만들기"}</Button>
     </div>
   </div>;
 }

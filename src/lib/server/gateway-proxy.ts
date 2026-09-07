@@ -10,7 +10,18 @@ export async function proxyGatewayRequest(request: NextRequest, path: string[]) 
   headers.delete("content-length");
   const body = request.method === "GET" || request.method === "HEAD" ? undefined : await request.arrayBuffer();
   const upstreamUrl = new URL(`${path.join("/")}${request.nextUrl.search}`, `${gatewayOrigin}/`);
-  let upstream = await fetch(upstreamUrl, { method: request.method, headers, body, cache: "no-store", redirect: "manual" });
+  const retryable = request.method === "GET" || request.method === "HEAD" || headers.has("idempotency-key");
+  const fetchUpstream = async (url: URL) => {
+    try {
+      return await fetch(url, { method: request.method, headers, body, cache: "no-store", redirect: "manual" });
+    } catch (error) {
+      // A dropped connection between the local proxy and the gateway should not
+      // make an idempotent content-generation request look like a user error.
+      if (!retryable) throw error;
+      return fetch(url, { method: request.method, headers, body, cache: "no-store", redirect: "manual" });
+    }
+  };
+  let upstream = await fetchUpstream(upstreamUrl);
 
   // Keep a same-origin API redirect inside the server proxy. Letting it reach the
   // browser could move an authenticated local request to the API origin directly.
@@ -18,7 +29,7 @@ export async function proxyGatewayRequest(request: NextRequest, path: string[]) 
   if (location && [301, 302, 307, 308].includes(upstream.status)) {
     const redirectUrl = new URL(location, upstreamUrl);
     if (redirectUrl.origin === upstreamUrl.origin) {
-      upstream = await fetch(redirectUrl, { method: request.method, headers, body, cache: "no-store", redirect: "manual" });
+      upstream = await fetchUpstream(redirectUrl);
     }
   }
   const responseHeaders = new Headers(upstream.headers);
