@@ -12,6 +12,7 @@ import { AuthShell } from "@/features/auth/auth-shell";
 import { Button } from "@/components/common/ui";
 import { useToast } from "@/components/common/providers";
 import { backendApi } from "@/lib/api/backend-api";
+import { LegalDocument, legalDocumentTitle } from "@/components/common/legal-document";
 
 const schema = z.object({
   name: z.string().trim().min(2, "이름을 2자 이상 입력해 주세요."),
@@ -30,18 +31,13 @@ const schema = z.object({
 
 type Values = z.infer<typeof schema>;
 type Policy = "privacy" | "terms";
-const policyMeta = {
-  privacy: { title: "개인정보처리방침", description: "개인정보처리방침은 현재 준비 중입니다." },
-  terms: { title: "서비스 이용약관", description: "서비스 이용약관은 현재 준비 중입니다." },
-} satisfies Record<Policy, { title: string; description: string }>;
-
 function PolicyDialog({ policy, onClose }: { policy: Policy | null; onClose: () => void }) {
   if (!policy) return null;
-  const content = policyMeta[policy];
+  const title = legalDocumentTitle[policy];
   return <div className="fixed inset-0 z-[110] grid place-items-end bg-black/35 p-4 sm:place-items-center" onMouseDown={onClose}>
     <div role="dialog" aria-modal="true" aria-labelledby="policy-dialog-title" onMouseDown={(event) => event.stopPropagation()} className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl sm:p-7">
-      <div className="flex items-center justify-between gap-4"><h2 id="policy-dialog-title" className="text-xl font-black text-stone-900">{content.title}</h2><button type="button" onClick={onClose} aria-label={`${content.title} 닫기`} className="focus-ring grid size-9 shrink-0 place-items-center rounded-xl text-stone-400 hover:bg-stone-100 hover:text-stone-700"><X className="size-5" /></button></div>
-      <div className="mt-5 grid min-h-48 place-items-center rounded-2xl border border-dashed border-stone-200 bg-stone-50 p-6 text-center"><p className="text-sm font-semibold text-stone-500">{content.description}</p></div>
+      <div className="flex items-center justify-between gap-4"><h2 id="policy-dialog-title" className="text-xl font-black text-stone-900">{title}</h2><button type="button" onClick={onClose} aria-label={`${title} 닫기`} className="focus-ring grid size-9 shrink-0 place-items-center rounded-xl text-stone-400 hover:bg-stone-100 hover:text-stone-700"><X className="size-5" /></button></div>
+      <div className="mt-5 max-h-[62vh] overflow-y-auto rounded-2xl border border-stone-200 p-5"><p className="mb-6 text-xs font-semibold text-stone-400">v1.0 · 시행일: 2026년 9월 8일{policy === "privacy" ? " · 최종 수정일: 2026년 9월 8일" : ""}</p><LegalDocument type={policy} /></div>
     </div>
   </div>;
 }
